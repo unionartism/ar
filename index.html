@@ -2,445 +2,836 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Wall Distance MVP v3</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <title>벽-발끝 거리 측정 MVP</title>
+
   <style>
-    html, body { margin:0; height:100%; overflow:hidden; background:#000; color:#fff; font-family:system-ui,-apple-system,sans-serif; }
-    #app { position:fixed; inset:0; background:#000; }
-    video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; background:#111; }
-    #img { position:absolute; display:none; max-width:none; transform-origin:center; pointer-events:none; box-shadow:0 2px 12px rgba(0,0,0,.35); }
+    * {
+      box-sizing: border-box;
+    }
 
-    .cross { position:absolute; left:50%; top:50%; width:54px; height:54px; transform:translate(-50%,-50%); pointer-events:none; }
-    .cross:before, .cross:after { content:""; position:absolute; background:#fff; box-shadow:0 0 4px #000; }
-    .cross:before { left:26px; top:0; width:2px; height:54px; }
-    .cross:after { left:0; top:26px; width:54px; height:2px; }
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      color: #fff;
+    }
 
-    #measureGuide { display:none; position:absolute; inset:0; pointer-events:none; }
-    #measureGuide.on { display:block; }
-    .horizonLine { position:absolute; left:0; right:0; top:50%; height:3px; transform:translateY(-50%); background:#33ff88; box-shadow:0 0 0 1px rgba(0,0,0,.8), 0 0 12px rgba(51,255,136,.7); }
-    .horizonBand { position:absolute; left:0; right:0; top:calc(50% - 22px); height:44px; border-top:1px dashed rgba(51,255,136,.8); border-bottom:1px dashed rgba(51,255,136,.8); background:rgba(51,255,136,.08); }
-    .guideText { position:absolute; left:50%; top:calc(50% + 28px); transform:translateX(-50%); background:rgba(0,0,0,.72); padding:7px 10px; border-radius:999px; font-size:13px; white-space:nowrap; }
-    .angleBadge { position:absolute; left:50%; top:calc(50% - 72px); transform:translateX(-50%); background:rgba(0,0,0,.72); padding:7px 10px; border-radius:999px; font-size:13px; white-space:nowrap; }
+    #app {
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
+      background: #000;
+    }
 
-    .panel { position:absolute; left:8px; right:8px; bottom:calc(8px + env(safe-area-inset-bottom)); padding:10px; border-radius:12px; background:rgba(0,0,0,.76); font-size:13px; }
-    .row { display:flex; gap:6px; align-items:center; margin-top:7px; flex-wrap:wrap; }
-    .row:first-child { margin-top:0; }
-    button, label { border:0; border-radius:8px; padding:8px 9px; background:#fff; color:#111; font-weight:700; font-size:13px; }
-    button.secondary { background:#dff6ff; }
-    input { border:0; border-radius:8px; padding:7px; font-size:13px; }
-    input[type="number"] { width:72px; }
-    input[type="range"] { flex:1; min-width:120px; padding:0; }
-    input[type="file"] { display:none; }
-    .muted { color:rgba(255,255,255,.75); }
-    .ok { color:#a7ffb5; }
-    .warn { color:#ffd48a; }
-    #status { line-height:1.35; white-space:pre-line; }
-    #debug { margin-top:7px; line-height:1.35; font-size:12px; word-break:break-word; white-space:pre-line; }
+    video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      background: #111;
+    }
+
+    canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+    }
+
+    .top {
+      position: absolute;
+      top: env(safe-area-inset-top, 0);
+      left: 0;
+      right: 0;
+      padding: 10px;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.75), rgba(0,0,0,0));
+      pointer-events: none;
+    }
+
+    .title {
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .status {
+      font-size: 13px;
+      line-height: 1.35;
+      opacity: 0.95;
+    }
+
+    .panel {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 10px;
+      padding-bottom: calc(10px + env(safe-area-inset-bottom, 0));
+      background: rgba(0, 0, 0, 0.72);
+      backdrop-filter: blur(8px);
+    }
+
+    .row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+
+    button,
+    input {
+      font: inherit;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.25);
+    }
+
+    button {
+      flex: 1;
+      padding: 10px 8px;
+      color: #fff;
+      background: #1d4ed8;
+      font-weight: 700;
+    }
+
+    button.secondary {
+      background: #374151;
+    }
+
+    button.warn {
+      background: #b45309;
+    }
+
+    button.danger {
+      background: #991b1b;
+    }
+
+    button:active {
+      transform: scale(0.98);
+    }
+
+    label {
+      flex: 1;
+      font-size: 11px;
+      color: rgba(255,255,255,0.78);
+    }
+
+    input {
+      width: 100%;
+      margin-top: 3px;
+      padding: 8px;
+      color: #fff;
+      background: rgba(255,255,255,0.1);
+    }
+
+    .result {
+      margin-top: 4px;
+      padding: 9px;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.1);
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    .debug {
+      margin-top: 5px;
+      font-size: 11px;
+      line-height: 1.35;
+      color: rgba(255,255,255,0.75);
+      word-break: break-all;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.15);
+      font-size: 11px;
+      margin-right: 4px;
+    }
   </style>
 </head>
+
 <body>
-<div id="app">
-  <video id="video" autoplay muted playsinline></video>
-  <img id="img" alt="배치 이미지" />
-  <div class="cross"></div>
+  <div id="app">
+    <video id="video" playsinline muted autoplay></video>
+    <canvas id="overlay"></canvas>
 
-  <div id="measureGuide">
-    <div class="horizonBand"></div>
-    <div class="horizonLine"></div>
-    <div id="angleBadge" class="angleBadge">각도차 -°</div>
-    <div id="guideText" class="guideText">벽과 바닥이 만나는 선을 초록선에 맞추세요</div>
+    <div class="top">
+      <div class="title">거리 측정 테스트</div>
+      <div id="status" class="status">
+        1. 센서 권한 요청 → 2. 카메라 시작 → 3. 정면 기준 저장
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        <button id="sensorBtn">센서 권한 요청</button>
+        <button id="cameraBtn">카메라 시작</button>
+      </div>
+
+      <div class="row">
+        <button id="referenceBtn" class="warn">정면 기준 저장</button>
+        <button id="resetBtn" class="secondary">초기화</button>
+      </div>
+
+      <div class="row">
+        <label>
+          카메라 높이 cm
+          <input id="cameraHeightInput" type="number" value="150" min="80" max="220" step="1" />
+        </label>
+
+        <label>
+          세로 화각
+          <input id="fovInput" type="number" value="60" min="35" max="90" step="1" />
+        </label>
+
+        <label>
+          보정 배율
+          <input id="scaleInput" type="number" value="1.00" min="0.5" max="1.5" step="0.01" />
+        </label>
+      </div>
+
+      <div class="row">
+        <button id="flipBtn" class="secondary">각도 방향 반전</button>
+        <button id="manualWallBtn" class="secondary">다음: 벽/바닥선</button>
+        <button id="manualToeBtn" class="secondary">다음: 발끝</button>
+      </div>
+
+      <div id="result" class="result">
+        측정 거리: -
+      </div>
+
+      <div id="debug" class="debug">
+        sensor: 대기중
+      </div>
+    </div>
   </div>
 
-  <div class="panel">
-    <div id="status" class="muted">1) 센서 권한 요청 → 2) 카메라 시작 → 3) 수평 기준 저장 → 4) 벽/바닥선 측정</div>
+  <script>
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("overlay");
+    const ctx = canvas.getContext("2d");
 
-    <div class="row">
-      <button id="sensorBtn">센서 권한 요청</button>
-      <button id="startBtn">카메라 시작</button>
-      <button id="zeroBtn" class="secondary">수평 기준 저장</button>
-      <button id="measureBtn" class="secondary">벽/바닥선 측정</button>
-    </div>
+    const statusEl = document.getElementById("status");
+    const resultEl = document.getElementById("result");
+    const debugEl = document.getElementById("debug");
 
-    <div class="row">
-      <span>카메라높이 cm</span>
-      <input id="cameraHeight" type="number" value="155" min="80" max="220" />
-      <span>거리 m</span>
-      <input id="distance" type="number" value="2.00" min="0.2" max="20" step="0.01" />
-    </div>
+    const sensorBtn = document.getElementById("sensorBtn");
+    const cameraBtn = document.getElementById("cameraBtn");
+    const referenceBtn = document.getElementById("referenceBtn");
+    const resetBtn = document.getElementById("resetBtn");
+    const flipBtn = document.getElementById("flipBtn");
+    const manualWallBtn = document.getElementById("manualWallBtn");
+    const manualToeBtn = document.getElementById("manualToeBtn");
 
-    <div class="row">
-      <label for="file">이미지 선택</label>
-      <input id="file" type="file" accept="image/*" />
-      <button id="placeBtn">이미지 배치</button>
-      <span>실제폭 cm</span>
-      <input id="realWidth" type="number" value="100" min="5" max="500" />
-    </div>
+    const cameraHeightInput = document.getElementById("cameraHeightInput");
+    const fovInput = document.getElementById("fovInput");
+    const scaleInput = document.getElementById("scaleInput");
 
-    <div class="row">
-      <span>크기</span>
-      <input id="scale" type="range" min="0.3" max="2.5" step="0.01" value="1" />
-    </div>
+    const RAD = Math.PI / 180;
+    const DEG = 180 / Math.PI;
 
-    <div id="debug" class="muted">센서 미시작</div>
-  </div>
-</div>
+    let sensorPermissionRequested = false;
+    let cameraStarted = false;
 
-<script>
-  const video = document.getElementById('video');
-  const img = document.getElementById('img');
-  const statusEl = document.getElementById('status');
-  const debugEl = document.getElementById('debug');
-  const guideEl = document.getElementById('measureGuide');
-  const angleBadge = document.getElementById('angleBadge');
+    let orientationCount = 0;
+    let motionCount = 0;
 
-  const sensorBtn = document.getElementById('sensorBtn');
-  const startBtn = document.getElementById('startBtn');
-  const zeroBtn = document.getElementById('zeroBtn');
-  const measureBtn = document.getElementById('measureBtn');
-  const placeBtn = document.getElementById('placeBtn');
-  const file = document.getElementById('file');
-  const cameraHeight = document.getElementById('cameraHeight');
-  const distance = document.getElementById('distance');
-  const realWidth = document.getElementById('realWidth');
-  const scale = document.getElementById('scale');
+    let orientation = {
+      alpha: null,
+      beta: null,
+      gamma: null
+    };
 
-  const H_FOV_DEG = 65;
-  const V_FOV_DEG = 50;
+    let motionGravity = {
+      x: null,
+      y: null,
+      z: null
+    };
 
-  let ori = { alpha:null, beta:null, gamma:null, t:0 };
-  let gravity = { x:null, y:null, z:null, t:0 };
-  let orientationCount = 0;
-  let motionCount = 0;
-  let permissionText = '권한 미요청';
-  let sensorListenersAttached = false;
-  let sensorsRequested = false;
-  let cameraStarted = false;
+    let referencePitch = null;
+    let pitchSign = 1;
 
-  let zero = null;
-  let imageAspect = 1;
-  let hasImage = false;
-  let placement = null;
+    let mode = "idle";
+    let wallPoint = null;
+    let toePoint = null;
+    let measuredDistanceCm = null;
 
-  function setStatus(text, cls='muted') {
-    statusEl.className = cls;
-    statusEl.textContent = text;
-  }
-
-  function showGuide(on) {
-    guideEl.classList.toggle('on', !!on);
-  }
-
-  function rad(deg) { return deg * Math.PI / 180; }
-  function deg(rad) { return rad * 180 / Math.PI; }
-  function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
-
-  function fmt(v, digits=1) {
-    return v == null || Number.isNaN(v) ? '-' : Number(v).toFixed(digits);
-  }
-
-  function angleDiff(a, b) {
-    if (a == null || b == null) return null;
-    let d = a - b;
-    while (d > 180) d -= 360;
-    while (d < -180) d += 360;
-    return d;
-  }
-
-  function mag(v) {
-    if (!v || v.x == null || v.y == null || v.z == null) return 0;
-    return Math.sqrt(v.x*v.x + v.y*v.y + v.z*v.z);
-  }
-
-  function gravityReady(v) {
-    const m = mag(v);
-    return m > 5 && m < 13;
-  }
-
-  function gravityAngleDeg(a, b) {
-    if (!gravityReady(a) || !gravityReady(b)) return null;
-    const dot = a.x*b.x + a.y*b.y + a.z*b.z;
-    const m = mag(a) * mag(b);
-    const c = clamp(dot / m, -1, 1);
-    return deg(Math.acos(c));
-  }
-
-  function freshestSensorAgeMs() {
-    const now = performance.now();
-    const t = Math.max(ori.t || 0, gravity.t || 0);
-    return t ? Math.round(now - t) : null;
-  }
-
-  function getDeltaDeg() {
-    if (!zero) return { value:null, source:'none' };
-
-    const gDelta = gravityAngleDeg(zero.gravity, gravity);
-    if (gDelta != null && gDelta >= 0.3) {
-      return { value:gDelta, source:'motion/gravity' };
+    function setStatus(text) {
+      statusEl.textContent = text;
     }
 
-    const bDelta = zero.beta == null || ori.beta == null ? null : Math.abs(angleDiff(ori.beta, zero.beta));
-    if (bDelta != null) {
-      return { value:bDelta, source:'orientation/beta' };
+    function resizeCanvas() {
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.round(window.innerWidth * dpr);
+      canvas.height = Math.round(window.innerHeight * dpr);
+      canvas.style.width = window.innerWidth + "px";
+      canvas.style.height = window.innerHeight + "px";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      draw();
     }
 
-    return { value:null, source:'none' };
-  }
+    window.addEventListener("resize", resizeCanvas);
+    window.addEventListener("orientationchange", () => {
+      setTimeout(resizeCanvas, 250);
+    });
 
-  function updateDebug() {
-    const age = freshestSensorAgeMs();
-    const delta = getDeltaDeg();
-    angleBadge.textContent = `각도차 ${fmt(delta.value)}° / ${delta.source}`;
-    debugEl.textContent =
-      `${permissionText}\n` +
-      `orientation ${orientationCount}회: alpha ${fmt(ori.alpha)} / beta ${fmt(ori.beta)} / gamma ${fmt(ori.gamma)}\n` +
-      `motion ${motionCount}회: gX ${fmt(gravity.x,2)} / gY ${fmt(gravity.y,2)} / gZ ${fmt(gravity.z,2)} / |g| ${fmt(mag(gravity),2)}\n` +
-      `기준: ${zero ? '저장됨' : '없음'} / 각도차 ${fmt(delta.value)}° / 소스 ${delta.source} / 마지막수신 ${age == null ? '-' : age + 'ms 전'}`;
-  }
+    resizeCanvas();
 
-  function attachSensorListeners() {
-    if (sensorListenersAttached) return;
-    sensorListenersAttached = true;
+    function isNumber(v) {
+      return typeof v === "number" && Number.isFinite(v);
+    }
 
-    window.addEventListener('deviceorientation', (e) => {
-      orientationCount += 1;
-      ori = {
-        alpha: e.alpha,
-        beta: e.beta,
-        gamma: e.gamma,
-        t: performance.now()
-      };
-      updateDebug();
-    }, true);
+    function angleDiffDeg(a, b) {
+      // a - b 값을 -180 ~ 180 범위로 정규화
+      return ((a - b + 540) % 360) - 180;
+    }
 
-    window.addEventListener('devicemotion', (e) => {
-      motionCount += 1;
-      const g = e.accelerationIncludingGravity;
-      if (g && g.x != null && g.y != null && g.z != null) {
-        gravity = {
-          x: g.x,
-          y: g.y,
-          z: g.z,
-          t: performance.now()
+    function getMotionPitchDeg() {
+      const gx = motionGravity.x;
+      const gy = motionGravity.y;
+      const gz = motionGravity.z;
+
+      if (!isNumber(gx) || !isNumber(gy) || !isNumber(gz)) {
+        return null;
+      }
+
+      // iOS/Android 축 기준 차이를 줄이기 위한 근사값.
+      // 정밀한 절대각이 아니라 "정면 기준 저장 후 변화량"만 사용한다.
+      return Math.atan2(gz, -gy) * DEG;
+    }
+
+    function getRawPitchDeg() {
+      // 1순위: DeviceOrientationEvent.beta
+      if (isNumber(orientation.beta)) {
+        return orientation.beta;
+      }
+
+      // 2순위: DeviceMotionEvent.accelerationIncludingGravity
+      const motionPitch = getMotionPitchDeg();
+      if (isNumber(motionPitch)) {
+        return motionPitch;
+      }
+
+      return null;
+    }
+
+    function getSensorSource() {
+      if (isNumber(orientation.beta)) return "orientation.beta";
+      if (isNumber(getMotionPitchDeg())) return "motion.gravity";
+      return "none";
+    }
+
+    function getCameraDownAngleDeg() {
+      const rawPitch = getRawPitchDeg();
+
+      if (!isNumber(rawPitch) || !isNumber(referencePitch)) {
+        return null;
+      }
+
+      // 정면 기준 대비 현재 카메라가 아래를 보는 각도
+      return pitchSign * angleDiffDeg(referencePitch, rawPitch);
+    }
+
+    function getPixelOffsetAngleDeg(y) {
+      const h = window.innerHeight;
+      const verticalFovDeg = Number(fovInput.value) || 60;
+      const verticalFovRad = verticalFovDeg * RAD;
+
+      // 화면 중앙 기준:
+      // y가 아래쪽이면 양수, 위쪽이면 음수
+      const normalizedY = (y - h / 2) / (h / 2);
+      const angleRad = Math.atan(normalizedY * Math.tan(verticalFovRad / 2));
+
+      return angleRad * DEG;
+    }
+
+    function estimateGroundDistanceCm(y) {
+      const cameraHeightCm = Number(cameraHeightInput.value) || 150;
+      const correctionScale = Number(scaleInput.value) || 1;
+
+      const cameraDownDeg = getCameraDownAngleDeg();
+
+      if (!isNumber(cameraDownDeg)) {
+        return {
+          ok: false,
+          error: "정면 기준 또는 센서값이 없습니다.",
+          distanceCm: null,
+          rayDownDeg: null,
+          cameraDownDeg: null,
+          pixelOffsetDeg: null
         };
       }
-      updateDebug();
-    }, true);
-  }
 
-  async function requestOnePermission(EventClass, label) {
-    if (typeof EventClass === 'undefined') return `${label}: 미지원`;
-    if (typeof EventClass.requestPermission !== 'function') return `${label}: 권한요청 API 없음`;
+      const pixelOffsetDeg = getPixelOffsetAngleDeg(y);
 
-    try {
-      const res = await EventClass.requestPermission();
-      return `${label}: ${res}`;
-    } catch (e) {
-      return `${label}: 실패(${e.name || 'error'})`;
-    }
-  }
+      // 실제 터치 지점을 향한 광선이 수평선 아래로 내려간 각도
+      const rayDownDeg = cameraDownDeg + pixelOffsetDeg;
 
-  async function requestSensors() {
-    attachSensorListeners();
-
-    if (!window.isSecureContext) {
-      permissionText = '권한: HTTPS 아님';
-      setStatus('HTTPS 환경이 아닙니다. GitHub Pages HTTPS 주소에서 접속해야 센서/카메라가 안정적으로 동작합니다.', 'warn');
-      updateDebug();
-      return;
-    }
-
-    // 중요: iOS에서는 이 함수가 반드시 버튼 클릭 콜스택에서 바로 호출되어야 합니다.
-    const motRes = await requestOnePermission(window.DeviceMotionEvent, 'motion');
-    const oriRes = await requestOnePermission(window.DeviceOrientationEvent, 'orientation');
-    sensorsRequested = true;
-    permissionText = `권한: ${motRes} / ${oriRes}`;
-    updateDebug();
-
-    setStatus('센서 권한 요청 완료. 이제 카메라를 시작하거나, 이미 켜져 있다면 센서 수신을 확인합니다.', 'ok');
-
-    setTimeout(() => {
-      updateDebug();
-      if (orientationCount === 0 && motionCount === 0) {
-        setStatus('권한 요청은 했지만 센서 이벤트가 아직 없습니다. iOS 설정 > Safari > 동작 및 방향 접근이 켜져 있는지 확인하세요. 거리값 직접 입력은 가능합니다.', 'warn');
-      } else if (!gravityReady(gravity) && ori.beta == null) {
-        setStatus('센서 이벤트는 있으나 거리 계산값이 부족합니다. 폰을 조금 움직여 보거나 거리 m 값을 직접 입력하세요.', 'warn');
-      } else {
-        setStatus('센서 수신 확인. 벽 눈높이를 정면으로 비추고 “수평 기준 저장”을 누르세요.', 'ok');
+      if (rayDownDeg <= 1) {
+        return {
+          ok: false,
+          error: "터치 지점이 수평선보다 충분히 아래에 있지 않습니다.",
+          distanceCm: null,
+          rayDownDeg,
+          cameraDownDeg,
+          pixelOffsetDeg
+        };
       }
-    }, 1200);
-  }
 
-  async function startCamera() {
-    try {
-      if (!window.isSecureContext) {
-        setStatus('HTTPS 환경이 아닙니다. GitHub Pages HTTPS 주소에서 접속해야 합니다.', 'warn');
-        return;
+      if (rayDownDeg >= 89) {
+        return {
+          ok: false,
+          error: "각도가 너무 큽니다. 카메라를 조금 더 멀리 향해보세요.",
+          distanceCm: null,
+          rayDownDeg,
+          cameraDownDeg,
+          pixelOffsetDeg
+        };
       }
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setStatus('이 브라우저는 카메라 API를 지원하지 않습니다.', 'warn');
+
+      const distanceCm = cameraHeightCm / Math.tan(rayDownDeg * RAD) * correctionScale;
+
+      return {
+        ok: true,
+        error: null,
+        distanceCm,
+        rayDownDeg,
+        cameraDownDeg,
+        pixelOffsetDeg
+      };
+    }
+
+    function updateMeasuredDistance() {
+      if (!wallPoint || !toePoint) {
+        measuredDistanceCm = null;
+        resultEl.innerHTML = "측정 거리: -";
         return;
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal:'environment' },
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        },
-        audio: false
-      });
-      video.srcObject = stream;
-      await video.play();
-      cameraStarted = true;
+      const wall = estimateGroundDistanceCm(wallPoint.y);
+      const toe = estimateGroundDistanceCm(toePoint.y);
 
-      if (!sensorsRequested) {
-        setStatus('카메라 시작 완료. iOS에서는 “센서 권한 요청” 버튼을 따로 눌러 주세요.', 'ok');
-      } else {
-        setStatus('카메라 시작 완료. 벽 눈높이를 정면으로 비추고 “수평 기준 저장”을 누르세요.', 'ok');
+      wallPoint.estimate = wall;
+      toePoint.estimate = toe;
+
+      if (!wall.ok || !toe.ok) {
+        measuredDistanceCm = null;
+        resultEl.innerHTML = `
+          <strong>측정 실패</strong><br>
+          벽/바닥선: ${wall.error || "-"}<br>
+          발끝: ${toe.error || "-"}
+        `;
+        return;
       }
+
+      measuredDistanceCm = Math.abs(wall.distanceCm - toe.distanceCm);
+
+      resultEl.innerHTML = `
+        <strong>측정 거리: ${Math.round(measuredDistanceCm)} cm</strong><br>
+        <span class="badge">벽/바닥선 ${Math.round(wall.distanceCm)}cm</span>
+        <span class="badge">발끝 ${Math.round(toe.distanceCm)}cm</span>
+      `;
+    }
+
+    async function requestSensors() {
+      try {
+        let motionResult = "not-needed";
+        let orientationResult = "not-needed";
+
+        // iOS 13+ Motion 권한
+        if (
+          typeof DeviceMotionEvent !== "undefined" &&
+          typeof DeviceMotionEvent.requestPermission === "function"
+        ) {
+          motionResult = await DeviceMotionEvent.requestPermission();
+        }
+
+        // iOS 13+ Orientation 권한
+        if (
+          typeof DeviceOrientationEvent !== "undefined" &&
+          typeof DeviceOrientationEvent.requestPermission === "function"
+        ) {
+          orientationResult = await DeviceOrientationEvent.requestPermission();
+        }
+
+        window.addEventListener("deviceorientation", handleOrientation, true);
+        window.addEventListener("devicemotion", handleMotion, true);
+
+        sensorPermissionRequested = true;
+
+        setStatus(
+          `센서 권한 요청 완료. motion: ${motionResult}, orientation: ${orientationResult}`
+        );
+      } catch (err) {
+        setStatus("센서 권한 요청 실패: " + err.message);
+      }
+    }
+
+    async function startCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
+          },
+          audio: false
+        });
+
+        video.srcObject = stream;
+        await video.play();
+
+        cameraStarted = true;
+        setStatus("카메라 시작됨. 벽 눈높이를 정면으로 비추고 '정면 기준 저장'을 누르세요.");
+      } catch (err) {
+        setStatus("카메라 시작 실패: " + err.message);
+      }
+    }
+
+    function handleOrientation(event) {
+      orientationCount++;
+
+      orientation.alpha = isNumber(event.alpha) ? event.alpha : null;
+      orientation.beta = isNumber(event.beta) ? event.beta : null;
+      orientation.gamma = isNumber(event.gamma) ? event.gamma : null;
+    }
+
+    function handleMotion(event) {
+      motionCount++;
+
+      const g = event.accelerationIncludingGravity;
+
+      if (g) {
+        motionGravity.x = isNumber(g.x) ? g.x : null;
+        motionGravity.y = isNumber(g.y) ? g.y : null;
+        motionGravity.z = isNumber(g.z) ? g.z : null;
+      }
+    }
+
+    function saveReference() {
+      const rawPitch = getRawPitchDeg();
+
+      if (!isNumber(rawPitch)) {
+        setStatus("센서값이 아직 없습니다. 센서 권한 요청 후 휴대폰을 살짝 움직여보세요.");
+        return;
+      }
+
+      referencePitch = rawPitch;
+      mode = "wall";
+
+      wallPoint = null;
+      toePoint = null;
+      measuredDistanceCm = null;
+
+      setStatus("정면 기준 저장됨. 이제 벽과 바닥이 만나는 선/점을 터치하세요.");
+      updateMeasuredDistance();
+      draw();
+    }
+
+    function resetMeasurement() {
+      mode = "idle";
+      wallPoint = null;
+      toePoint = null;
+      measuredDistanceCm = null;
+      referencePitch = null;
+
+      resultEl.innerHTML = "측정 거리: -";
+      setStatus("초기화됨. 벽 눈높이를 정면으로 비추고 '정면 기준 저장'을 누르세요.");
+      draw();
+    }
+
+    function flipAngleSign() {
+      pitchSign *= -1;
+      updateMeasuredDistance();
+
+      setStatus(
+        pitchSign === 1
+          ? "각도 방향: 기본"
+          : "각도 방향: 반전"
+      );
+
+      draw();
+    }
+
+    function getCanvasTouchPoint(event) {
+      const rect = canvas.getBoundingClientRect();
+      const touch = event.touches ? event.touches[0] : event;
+
+      return {
+        x: touch.clientX - rect.left,
+        y: touch.clientY - rect.top
+      };
+    }
+
+    canvas.addEventListener("touchstart", handlePointer, { passive: false });
+    canvas.addEventListener("mousedown", handlePointer);
+
+    function handlePointer(event) {
+      event.preventDefault();
+
+      if (!referencePitch) {
+        setStatus("먼저 벽 눈높이를 정면으로 비추고 '정면 기준 저장'을 누르세요.");
+        return;
+      }
+
+      const p = getCanvasTouchPoint(event);
+      const estimate = estimateGroundDistanceCm(p.y);
+
+      if (mode === "idle") {
+        mode = "wall";
+      }
+
+      if (mode === "wall") {
+        wallPoint = {
+          x: p.x,
+          y: p.y,
+          estimate
+        };
+
+        mode = "toe";
+        setStatus("벽/바닥선 저장됨. 이제 발끝 위치를 터치하세요.");
+      } else if (mode === "toe") {
+        toePoint = {
+          x: p.x,
+          y: p.y,
+          estimate
+        };
+
+        mode = "done";
+        setStatus("발끝 저장됨. 거리 계산 결과를 확인하세요.");
+      } else if (mode === "done") {
+        // 완료 후 다시 터치하면 발끝을 갱신
+        toePoint = {
+          x: p.x,
+          y: p.y,
+          estimate
+        };
+
+        setStatus("발끝 위치를 다시 저장했습니다.");
+      }
+
+      updateMeasuredDistance();
+      draw();
+    }
+
+    function drawPoint(point, label, color) {
+      if (!point) return;
+
+      ctx.save();
+
+      ctx.fillStyle = color;
+      ctx.strokeStyle = "#000";
+      ctx.lineWidth = 3;
+
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.font = "bold 13px system-ui";
+      ctx.fillStyle = "#fff";
+      ctx.strokeStyle = "rgba(0,0,0,0.75)";
+      ctx.lineWidth = 4;
+      ctx.strokeText(label, point.x + 12, point.y - 12);
+      ctx.fillText(label, point.x + 12, point.y - 12);
+
+      if (point.estimate && point.estimate.ok) {
+        const text = `${Math.round(point.estimate.distanceCm)}cm`;
+        ctx.font = "12px system-ui";
+        ctx.strokeText(text, point.x + 12, point.y + 8);
+        ctx.fillText(text, point.x + 12, point.y + 8);
+      }
+
+      ctx.restore();
+    }
+
+    function drawGuide() {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const cx = w / 2;
+      const cy = h / 2;
+
+      ctx.save();
+
+      // 중앙 십자
+      ctx.strokeStyle = "rgba(255,255,255,0.75)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(cx - 18, cy);
+      ctx.lineTo(cx + 18, cy);
+      ctx.moveTo(cx, cy - 18);
+      ctx.lineTo(cx, cy + 18);
+      ctx.stroke();
+
+      // 수평 기준선
+      ctx.strokeStyle = "rgba(0,255,150,0.85)";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([8, 8]);
+      ctx.beginPath();
+      ctx.moveTo(18, cy);
+      ctx.lineTo(w - 18, cy);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // 안내 문구
+      let guideText = "정면 기준 저장 후 벽/바닥선과 발끝을 터치하세요.";
+
+      if (mode === "wall") {
+        guideText = "벽과 바닥이 만나는 선/점을 터치하세요.";
+      } else if (mode === "toe") {
+        guideText = "발끝 위치를 터치하세요.";
+      } else if (mode === "done") {
+        guideText = "측정 완료. 다시 터치하면 발끝 위치를 갱신합니다.";
+      }
+
+      ctx.font = "bold 15px system-ui";
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#fff";
+      ctx.strokeStyle = "rgba(0,0,0,0.75)";
+      ctx.lineWidth = 4;
+      ctx.strokeText(guideText, cx, cy - 34);
+      ctx.fillText(guideText, cx, cy - 34);
+
+      ctx.restore();
+    }
+
+    function drawConnection() {
+      if (!wallPoint || !toePoint) return;
+
+      ctx.save();
+
+      ctx.strokeStyle = "rgba(255,255,255,0.95)";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(wallPoint.x, wallPoint.y);
+      ctx.lineTo(toePoint.x, toePoint.y);
+      ctx.stroke();
+
+      const mx = (wallPoint.x + toePoint.x) / 2;
+      const my = (wallPoint.y + toePoint.y) / 2;
+
+      if (isNumber(measuredDistanceCm)) {
+        const text = `${Math.round(measuredDistanceCm)} cm`;
+
+        ctx.font = "bold 20px system-ui";
+        ctx.textAlign = "center";
+
+        const paddingX = 10;
+        const paddingY = 7;
+        const metrics = ctx.measureText(text);
+        const boxW = metrics.width + paddingX * 2;
+        const boxH = 34;
+
+        ctx.fillStyle = "rgba(0,0,0,0.75)";
+        ctx.beginPath();
+        ctx.roundRect(mx - boxW / 2, my - boxH / 2, boxW, boxH, 8);
+        ctx.fill();
+
+        ctx.fillStyle = "#fff";
+        ctx.fillText(text, mx, my + 7);
+      }
+
+      ctx.restore();
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+
+      drawGuide();
+      drawConnection();
+      drawPoint(wallPoint, "벽/바닥선", "#22c55e");
+      drawPoint(toePoint, "발끝", "#facc15");
+    }
+
+    function updateDebug() {
+      const rawPitch = getRawPitchDeg();
+      const motionPitch = getMotionPitchDeg();
+      const cameraDown = getCameraDownAngleDeg();
+
+      debugEl.innerHTML = `
+        sensorPermission: ${sensorPermissionRequested ? "requested" : "not requested"} /
+        camera: ${cameraStarted ? "on" : "off"}<br>
+        source: ${getSensorSource()} /
+        orientation events: ${orientationCount} /
+        motion events: ${motionCount}<br>
+        alpha: ${isNumber(orientation.alpha) ? orientation.alpha.toFixed(1) : "-"} /
+        beta: ${isNumber(orientation.beta) ? orientation.beta.toFixed(1) : "-"} /
+        gamma: ${isNumber(orientation.gamma) ? orientation.gamma.toFixed(1) : "-"}<br>
+        gravity x: ${isNumber(motionGravity.x) ? motionGravity.x.toFixed(2) : "-"} /
+        y: ${isNumber(motionGravity.y) ? motionGravity.y.toFixed(2) : "-"} /
+        z: ${isNumber(motionGravity.z) ? motionGravity.z.toFixed(2) : "-"}<br>
+        rawPitch: ${isNumber(rawPitch) ? rawPitch.toFixed(1) : "-"} /
+        motionPitch: ${isNumber(motionPitch) ? motionPitch.toFixed(1) : "-"} /
+        reference: ${isNumber(referencePitch) ? referencePitch.toFixed(1) : "-"} /
+        cameraDown: ${isNumber(cameraDown) ? cameraDown.toFixed(1) : "-"} /
+        sign: ${pitchSign}
+      `;
+    }
+
+    sensorBtn.addEventListener("click", requestSensors);
+    cameraBtn.addEventListener("click", startCamera);
+    referenceBtn.addEventListener("click", saveReference);
+    resetBtn.addEventListener("click", resetMeasurement);
+    flipBtn.addEventListener("click", flipAngleSign);
+
+    manualWallBtn.addEventListener("click", () => {
+      mode = "wall";
+      setStatus("다음 터치: 벽과 바닥이 만나는 선/점");
+      draw();
+    });
+
+    manualToeBtn.addEventListener("click", () => {
+      mode = "toe";
+      setStatus("다음 터치: 발끝 위치");
+      draw();
+    });
+
+    cameraHeightInput.addEventListener("input", () => {
+      updateMeasuredDistance();
+      draw();
+    });
+
+    fovInput.addEventListener("input", () => {
+      updateMeasuredDistance();
+      draw();
+    });
+
+    scaleInput.addEventListener("input", () => {
+      updateMeasuredDistance();
+      draw();
+    });
+
+    function loop() {
       updateDebug();
-    } catch (e) {
-      console.error(e);
-      setStatus(`카메라 시작 실패: ${e.name || 'error'}. HTTPS, Safari/Chrome 권한을 확인하세요.`, 'warn');
-      updateDebug();
-    }
-  }
-
-  function saveHorizontalZero() {
-    const canUseGravity = gravityReady(gravity);
-    const canUseBeta = ori.beta != null;
-
-    if (!canUseGravity && !canUseBeta) {
-      setStatus('센서값이 부족합니다. 먼저 “센서 권한 요청”을 누르고, 디버그에서 motion 또는 beta 값이 들어오는지 확인하세요. 거리 m 직접 입력은 가능합니다.', 'warn');
-      updateDebug();
-      return;
+      draw();
+      requestAnimationFrame(loop);
     }
 
-    zero = {
-      beta: ori.beta,
-      alpha: ori.alpha,
-      gravity: canUseGravity ? { x:gravity.x, y:gravity.y, z:gravity.z } : null
-    };
+    loop();
 
-    showGuide(true);
-    setStatus('수평 기준 저장 완료. 화면의 초록 수평선에 벽과 바닥이 만나는 선을 맞춘 뒤 “벽/바닥선 측정”을 누르세요.', 'ok');
-    updateDebug();
-  }
+    // 일부 구형 브라우저용 roundRect fallback
+    if (!CanvasRenderingContext2D.prototype.roundRect) {
+      CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+        if (w < 2 * r) r = w / 2;
+        if (h < 2 * r) r = h / 2;
 
-  function measure() {
-    if (!zero) {
-      showGuide(false);
-      setStatus('먼저 벽 눈높이를 정면으로 비춘 상태에서 “수평 기준 저장”을 눌러야 합니다.', 'warn');
-      return;
+        this.beginPath();
+        this.moveTo(x + r, y);
+        this.arcTo(x + w, y, x + w, y + h, r);
+        this.arcTo(x + w, y + h, x, y + h, r);
+        this.arcTo(x, y + h, x, y, r);
+        this.arcTo(x, y, x + w, y, r);
+        this.closePath();
+        return this;
+      };
     }
-
-    showGuide(true);
-    const delta = getDeltaDeg();
-    const deltaDeg = delta.value;
-
-    if (deltaDeg == null) {
-      setStatus('거리 계산에 필요한 센서값이 부족합니다. 초록선에 벽/바닥선을 맞춘 상태에서 다시 시도하거나 거리 m 값을 직접 입력해 주세요.', 'warn');
-      return;
-    }
-    if (deltaDeg < 3) {
-      setStatus(`기울기 차이가 ${deltaDeg.toFixed(1)}°로 너무 작습니다. 초록선에 벽/바닥선이 오도록 폰을 더 아래로 기울여 주세요.`, 'warn');
-      return;
-    }
-    if (deltaDeg > 80) {
-      setStatus(`기울기 차이가 ${deltaDeg.toFixed(1)}°로 너무 큽니다. 폰을 덜 기울인 상태에서 벽/바닥선을 초록선에 맞춰 주세요.`, 'warn');
-      return;
-    }
-
-    const h = Number(cameraHeight.value) / 100;
-    const d = h / Math.tan(rad(deltaDeg));
-    const result = clamp(d, 0.2, 20);
-    distance.value = result.toFixed(2);
-    showGuide(false);
-    setStatus(`거리 측정값: 약 ${result.toFixed(2)}m (${delta.source}, ${deltaDeg.toFixed(1)}°). 이제 벽 눈높이에 십자를 맞추고 이미지를 배치하세요.`, 'ok');
-    updateImage();
-  }
-
-  function metersToPixels(widthM, distM) {
-    const visibleWidthM = 2 * distM * Math.tan(rad(H_FOV_DEG) / 2);
-    return window.innerWidth * (widthM / visibleWidthM);
-  }
-
-  function placeImage() {
-    if (!hasImage) {
-      setStatus('먼저 이미지를 선택하세요.', 'warn');
-      return;
-    }
-    showGuide(false);
-    placement = {
-      alpha: ori.alpha,
-      beta: ori.beta,
-      x: window.innerWidth / 2,
-      y: window.innerHeight / 2
-    };
-    img.style.display = 'block';
-    updateImage();
-    setStatus('이미지 배치 완료. 거리/실제폭/크기를 조절해 보세요.', 'ok');
-  }
-
-  function updateImage() {
-    if (!placement || !hasImage) return;
-
-    const distM = Math.max(0.2, Number(distance.value) || 2);
-    const widthM = Math.max(0.05, Number(realWidth.value) / 100 || 1);
-    const s = Number(scale.value) || 1;
-    const w = metersToPixels(widthM * s, distM);
-    const h = w / imageAspect;
-
-    let x = placement.x;
-    let y = placement.y;
-
-    if (ori.alpha != null && placement.alpha != null) {
-      const dx = rad(angleDiff(ori.alpha, placement.alpha));
-      x = placement.x - Math.tan(dx) / Math.tan(rad(H_FOV_DEG) / 2) * window.innerWidth / 2;
-    }
-    if (ori.beta != null && placement.beta != null) {
-      const dy = rad(angleDiff(ori.beta, placement.beta));
-      y = placement.y + Math.tan(dy) / Math.tan(rad(V_FOV_DEG) / 2) * window.innerHeight / 2;
-    }
-
-    img.style.width = `${w}px`;
-    img.style.height = `${h}px`;
-    img.style.left = `${x}px`;
-    img.style.top = `${y}px`;
-    img.style.transform = 'translate(-50%, -50%)';
-  }
-
-  function loop() {
-    updateImage();
-    updateDebug();
-    requestAnimationFrame(loop);
-  }
-
-  sensorBtn.addEventListener('click', requestSensors);
-  startBtn.addEventListener('click', startCamera);
-  zeroBtn.addEventListener('click', saveHorizontalZero);
-  measureBtn.addEventListener('click', measure);
-  placeBtn.addEventListener('click', placeImage);
-  cameraHeight.addEventListener('input', updateImage);
-  distance.addEventListener('input', updateImage);
-  realWidth.addEventListener('input', updateImage);
-  scale.addEventListener('input', updateImage);
-  window.addEventListener('resize', updateImage);
-
-  file.addEventListener('change', () => {
-    const f = file.files && file.files[0];
-    if (!f) return;
-    const url = URL.createObjectURL(f);
-    img.onload = () => {
-      imageAspect = img.naturalWidth / img.naturalHeight;
-      hasImage = true;
-      setStatus('이미지 선택 완료. 거리 측정 후 벽 눈높이에 맞춰 이미지 배치를 누르세요.', 'ok');
-    };
-    img.src = url;
-  });
-
-  updateDebug();
-  loop();
-</script>
+  </script>
 </body>
 </html>
