@@ -8,15 +8,8 @@
   />
   <title>Poster AR Preview</title>
 
-  <!--
-    This product includes the XR Engine software developed by Niantic Spatial, Inc.
-    Copyright © 2026 Niantic Spatial, Inc. All rights reserved.
-    License: https://github.com/8thwall/engine/blob/main/LICENSE
-  -->
-
   <link rel="stylesheet" href="./style.css" />
 
-  <!-- 8th Wall / A-Frame stack. No npm build required. -->
   <script src="https://cdn.8thwall.com/web/aframe/8frame-1.5.0.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@8thwall/xrextras@1/dist/xrextras.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@8thwall/landing-page@1/dist/landing-page.js" crossorigin="anonymous"></script>
@@ -27,8 +20,8 @@
     data-preload-chunks="slam">
   </script>
 
-  <script src="./products.js"></script>
-  <script src="./ar-app.js"></script>
+  <script src="./products.js?v=4"></script>
+  <script src="./ar-app.js?v=4"></script>
 </head>
 
 <body>
@@ -39,9 +32,8 @@
 
   <div id="notice" class="notice">
     <b>사용 방법</b><br />
-    포스터를 놓고 싶은 벽 앞에 서서 화면 중앙을 원하는 위치에 맞춘 뒤
-    <b>이미지 배치</b>를 누르세요.<br />
-    배치된 이미지는 공간 좌표에 고정되어, 사용자가 움직여도 따라오지 않습니다.
+    먼저 벽과 바닥이 만나는 선을 화면 중앙에 맞추고 <b>벽 기준점</b>을 누르세요.<br />
+    그다음 발끝 위치를 화면 중앙에 맞추고 <b>발끝점</b>을 누른 뒤, 벽을 정면으로 보고 <b>이미지 배치</b>를 누르세요.
   </div>
 
   <div class="center-guide" aria-hidden="true"></div>
@@ -61,11 +53,34 @@
   </div>
 
   <div class="control-panel">
+    <div class="measurement-panel">
+      <div class="measurement-title">
+        <span>벽까지 거리</span>
+        <strong id="distanceValue">1.60m</strong>
+      </div>
+
+      <div id="measureStatus" class="measurement-status">
+        벽과 바닥이 만나는 선을 화면 중앙에 맞춘 뒤 “벽 기준점”을 누르세요.
+      </div>
+
+      <div class="control-row">
+        <button id="captureWallPoint" type="button">벽 기준점</button>
+        <button id="captureFootPoint" type="button">발끝점</button>
+        <button id="resetMeasurement" type="button">측정 초기화</button>
+      </div>
+
+      <div class="control-row">
+        <button id="distanceDown" type="button">거리 -</button>
+        <button id="distanceReset" type="button">1.6m</button>
+        <button id="distanceUp" type="button">거리 +</button>
+      </div>
+    </div>
+
     <button id="placePoster" class="primary-action" type="button">이미지 배치</button>
 
     <div class="control-row">
       <button id="scaleDown" type="button">작게</button>
-      <button id="scaleReset" type="button">기본크기</button>
+      <button id="scaleFit" type="button">실제크기</button>
       <button id="scaleUp" type="button">크게</button>
     </div>
 
@@ -77,13 +92,13 @@
 
     <div class="control-row">
       <button id="moveCloser" type="button">가까이</button>
+      <button id="rotateReset" type="button">회전 초기화</button>
       <button id="moveFarther" type="button">멀리</button>
-      <button id="scaleFit" type="button">맞춤</button>
     </div>
 
     <div class="control-row">
       <button id="rotateLeft" type="button">왼쪽 회전</button>
-      <button id="rotateReset" type="button">회전 초기화</button>
+      <button id="scaleReset" type="button">크기 초기화</button>
       <button id="rotateRight" type="button">오른쪽 회전</button>
     </div>
   </div>
@@ -91,24 +106,15 @@
   <a-scene
     id="scene"
     renderer="colorManagement: true; physicallyCorrectLights: true; antialias: true; alpha: true"
-    xrconfig="cameraDirection: back; allowedDevices: mobile"
-    xrweb="scale: absolute"
+    xrconfig="cameraDirection: back"
+    xrweb="allowedDevices: any; scale: absolute"
     landing-pages
     xrextras-loading
-    xrextras-runtime-error
-    poster-ar-app>
+    xrextras-runtime-error>
 
     <a-assets>
-      <img
-        id="poster-60x90-img"
-        src="./assets/poster-60x90.svg"
-        crossorigin="anonymous"
-      />
-      <img
-        id="frame-50x70-img"
-        src="./assets/frame-50x70.svg"
-        crossorigin="anonymous"
-      />
+      <img id="poster-60x90-img" src="./assets/poster-60x90.svg" crossorigin="anonymous" />
+      <img id="frame-50x70-img" src="./assets/frame-50x70.svg" crossorigin="anonymous" />
     </a-assets>
 
     <a-camera id="camera" position="0 1.6 0"></a-camera>
@@ -116,7 +122,6 @@
     <a-light type="ambient" intensity="0.9"></a-light>
     <a-light type="directional" position="0 4 2" intensity="0.6"></a-light>
 
-    <!-- AR poster. Placed once into world space by ar-app.js. -->
     <a-plane
       id="posterPlane"
       visible="false"
@@ -127,8 +132,10 @@
       class="ar-poster">
     </a-plane>
 
-    <!-- Border for visual scale. -->
     <a-entity id="posterBorder" visible="false"></a-entity>
+
+    <!-- App controller. Placed after AR objects so querySelector can find them reliably. -->
+    <a-entity id="posterApp" poster-ar-app></a-entity>
   </a-scene>
 </body>
 </html>

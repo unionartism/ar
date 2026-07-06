@@ -156,7 +156,7 @@ body.poster-placed .center-guide {
   position: fixed;
   z-index: 28;
   left: 50%;
-  bottom: calc(232px + env(safe-area-inset-bottom, 0));
+  bottom: calc(320px + env(safe-area-inset-bottom, 0));
   transform: translateX(-50%);
   display: flex;
   gap: 10px;
@@ -256,6 +256,39 @@ body.poster-placed .center-guide {
   gap: 6px;
 }
 
+.measurement-panel {
+  display: grid;
+  gap: 7px;
+  padding: 8px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .07);
+  border: 1px solid rgba(255, 255, 255, .1);
+}
+
+.measurement-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 3px;
+  color: rgba(255, 255, 255, .9);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.measurement-title strong {
+  color: #00e7ff;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.measurement-status {
+  padding: 0 3px;
+  color: rgba(255, 255, 255, .72);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
 /* Small screens */
 
 @media (max-height: 820px) {
@@ -264,7 +297,7 @@ body.poster-placed .center-guide {
   }
 
   .picker {
-    bottom: calc(220px + env(safe-area-inset-bottom, 0));
+    display: none;
   }
 
   .control-panel {
