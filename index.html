@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
-  <title>벽면 거리 측정 및 이미지 배치 AR</title>
+  <title>벽면 거리 측정 및 지정 위치 이미지 배치 AR</title>
 
   <style>
     * { box-sizing: border-box; }
@@ -75,23 +75,23 @@
     let hitTestSource = null;
     let hitTestSourceRequested = false;
 
+    // 단계: ready -> wallFloor -> toe -> placeImage -> done
     let step = "ready"; 
     let currentHitMatrix = null;
 
-    // 3D 메쉬 및 애니메이션 대상 변수
     let wallFloorMesh = null;
     let toeMesh = null;
     let lineMesh = null;
     let imagePlane = null;
 
-    // 애니메이션 제어용 시간값
     let lineProgress = 0;
     let isAnimatingLine = false;
+    let savedDistanceText = ""; // 거리 결과값 저장용
 
-    // 타겟 이미지 정보 (예: 가로 40cm, 세로 50cm 액자 -> 미터 환산 시 0.4, 0.5)
+    // 이미지 스펙 (40cm * 50cm -> 0.4m * 0.5m)
     const TARGET_IMAGE_WIDTH_M = 0.4;
     const TARGET_IMAGE_HEIGHT_M = 0.5;
-    const IMAGE_URL = 'https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=500'; // 테스트용 명화 이미지
+    const IMAGE_URL = 'https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=500';
 
     init();
 
@@ -144,6 +144,7 @@
         guideText.textContent = "벽면과 바닥이 만나는 모서리 지점을 조준점에 맞추고 버튼을 누르세요.";
         actionBtn.textContent = "벽/바닥선 확정";
         actionBtn.style.background = "#00d4ff";
+        actionBtn.style.color = "#fff";
       } else if (step === "toe") {
         stepTitle.textContent = "2단계: 사용자의 발끝";
         stepTitle.style.color = "#ffe600";
@@ -152,11 +153,19 @@
         actionBtn.textContent = "발끝 확정";
         actionBtn.style.background = "#ffe600";
         actionBtn.style.color = "#000";
+      } else if (step === "placeImage") {
+        stepTitle.textContent = "3단계: 벽면 이미지 배치";
+        stepTitle.style.color = "#ff00ff";
+        crosshair.style.borderColor = "#ff00ff";
+        guideText.textContent = "원하는 벽면 정면 위치를 바라보고 조준점을 맞춘 뒤 버튼을 눌러 이미지를 부착하세요.";
+        actionBtn.textContent = "여기에 이미지 부착";
+        actionBtn.style.background = "#ff00ff";
+        actionBtn.style.color = "#fff";
       } else if (step === "done") {
-        stepTitle.textContent = "측정 및 배치 완료";
+        stepTitle.textContent = "모든 배치 완료";
         stepTitle.style.color = "#00ff66";
         crosshair.style.borderColor = "#fff";
-        guideText.textContent = "줄자와 이미지가 벽면에 고정되었습니다. 자유롭게 확인해 보세요.";
+        guideText.textContent = "줄자와 이미지가 고정되었습니다. 자유롭게 확인해 보세요.";
         actionBtn.textContent = "완료됨";
         actionBtn.style.background = "#374151";
         actionBtn.style.color = "#fff";
@@ -165,66 +174,66 @@
 
     function onActionTriggered() {
       if (!currentHitMatrix) {
-        alert("공간 분석 대기 중입니다.");
+        alert("공간 분석 대기 중입니다. 평평한 곳을 비춰주세요.");
         return;
       }
 
       const geometry = new THREE.SphereGeometry(0.02, 32, 32);
       
       if (step === "wallFloor") {
-        // 1. 벽/바닥 마커 생성 및 팝업 애니메이션 효과 유도 스케일 설정
         const material = new THREE.MeshStandardMaterial({ color: 0x00d4ff });
         wallFloorMesh = new THREE.Mesh(geometry, material);
         wallFloorMesh.position.setFromMatrixPosition(new THREE.Matrix4().fromArray(currentHitMatrix));
-        wallFloorMesh.scale.set(0, 0, 0); // 애니메이션용 시작 크기 0
+        wallFloorMesh.scale.set(0, 0, 0);
         scene.add(wallFloorMesh);
 
         resultEl.innerHTML = "벽/바닥 기준점 등록 완료!";
         setStep("toe");
 
       } else if (step === "toe") {
-        // 2. 발끝 마커 생성
         const material = new THREE.MeshStandardMaterial({ color: 0xffe600 });
         toeMesh = new THREE.Mesh(geometry, material);
         toeMesh.position.setFromMatrixPosition(new THREE.Matrix4().fromArray(currentHitMatrix));
         toeMesh.scale.set(0, 0, 0);
         scene.add(toeMesh);
 
-        // 3. 줄자 선(Line) 생성 생성 (처음에는 길이가 0인 빈 버퍼로 생성)
+        // 줄자 애니메이션 선 초기화
         const lineGeometry = new THREE.BufferGeometry();
         const lineMaterial = new THREE.LineBasicMaterial({ color: 0x00ff66, linewidth: 5 });
         lineMesh = new THREE.Line(lineGeometry, lineMaterial);
         scene.add(lineMesh);
 
-        // 줄자 애니메이션 플래그 On
         lineProgress = 0;
         isAnimatingLine = true;
 
-        // 4. 벽면에 실제 크기 반영한 가상 이미지 부착 (40cm * 50cm)
+        // 거리 계산 및 고정 텍스트 저장
+        const distanceInMeters = wallFloorMesh.position.distanceTo(toeMesh.position);
+        const distanceInCm = Math.round(distanceInMeters * 100);
+        savedDistanceText = `<span style="font-size:1.2em; color:#ffe600; font-weight:bold;">★ 벽 ↔ 발끝 거리: ${distanceInCm}cm</span>`;
+        
+        resultEl.innerHTML = savedDistanceText + "<br><span style='color:#ff00ff;'>이제 벽면 정면에 이미지를 부착할 차례입니다.</span>";
+        setStep("placeImage");
+
+      } else if (step === "placeImage") {
+        // 3. 유저가 원하는 바로 그 벽면 조준점 위치에 이미지 배치
         const textureLoader = new THREE.TextureLoader();
         textureLoader.load(IMAGE_URL, (texture) => {
           const imageGeometry = new THREE.PlaneGeometry(TARGET_IMAGE_WIDTH_M, TARGET_IMAGE_HEIGHT_M);
           const imageMaterial = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
           imagePlane = new THREE.Mesh(imageGeometry, imageMaterial);
 
-          // 이미지의 중심 위치 설정: 1단계 벽/바닥선 위치 기준
-          // 벽면 정면에 붙이기 위해, 벽 모서리 좌표에서 약간 위쪽(Y축)으로 이미지 절반 크기만큼 올려서 배치
-          imagePlane.position.copy(wallFloorMesh.position);
-          imagePlane.position.y += (TARGET_IMAGE_HEIGHT_M / 2); 
-          imagePlane.position.z += 0.01; // 벽면과 겹쳐서 깜빡이는 현상(Z-fighting) 방지용 미세 조정
+          // 유저가 바라보고 있는 현재 조준점 위치 매트릭스로부터 3D 좌표 추출 후 할당
+          imagePlane.position.setFromMatrixPosition(new THREE.Matrix4().fromArray(currentHitMatrix));
+          imagePlane.position.z += 0.01; // Z-fighting 방지
 
-          // 카메라가 있는 방향을 바라보도록 회전 정렬
+          // 이미지가 유저(카메라) 정면을 똑바로 바라보도록 회전 설정
           imagePlane.lookAt(camera.position.x, imagePlane.position.y, camera.position.z);
           
           scene.add(imagePlane);
+          
+          resultEl.innerHTML = savedDistanceText + "<br><span style='color:#00ff66;'>선택한 벽면에 이미지 부착 완료!</span>";
+          setStep("done");
         });
-
-        // 최종 거리 연산 및 UI 표기
-        const distanceInMeters = wallFloorMesh.position.distanceTo(toeMesh.position);
-        const distanceInCm = Math.round(distanceInMeters * 100);
-
-        resultEl.innerHTML = `<span style="font-size:1.2em; color:#ffe600; font-weight:bold;">★ 벽 ↔ 발끝 거리: ${distanceInCm}cm</span>`;
-        setStep("done");
       }
     }
 
@@ -236,6 +245,7 @@
 
       isAnimatingLine = false;
       lineProgress = 0;
+      savedDistanceText = "";
 
       resultEl.textContent = "주변 공간(벽과 바닥)을 천천히 비춰주세요.";
       if (renderer.xr.isPresenting) setStep("wallFloor");
@@ -247,32 +257,21 @@
       renderer.setSize(window.innerWidth, window.innerHeight);
     }
 
-    // 애니메이션 처리 및 프레임 렌더링 루프
     function render(timestamp, frame) {
-      // 마커 생성 시 팝업 팅김 애니메이션 (Scale 0 -> 1)
-      if (wallFloorMesh && wallFloorMesh.scale.x < 1) {
-        wallFloorMesh.scale.addScalar(0.08);
-      }
-      if (toeMesh && toeMesh.scale.x < 1) {
-        toeMesh.scale.addScalar(0.08);
-      }
+      if (wallFloorMesh && wallFloorMesh.scale.x < 1) wallFloorMesh.scale.addScalar(0.08);
+      if (toeMesh && toeMesh.scale.x < 1) toeMesh.scale.addScalar(0.08);
 
-      // 1. 줄자선이 스르륵 늘어나는 애니메이션 효과
       if (isAnimatingLine && wallFloorMesh && toeMesh && lineMesh) {
-        lineProgress += 0.05; // 애니메이션 속도 조절
+        lineProgress += 0.05;
         if (lineProgress >= 1) {
           lineProgress = 1;
           isAnimatingLine = false;
         }
-
-        // 출발점(벽)에서 도착점(발끝) 사이의 진행도(Progress)에 따른 현재 끝점 보간 계산
         const currentLineEnd = new THREE.Vector3().lerpVectors(
           wallFloorMesh.position,
           toeMesh.position,
           lineProgress
         );
-
-        // 실시간으로 늘어나는 선 좌표 업데이트 적용
         lineMesh.geometry.setFromPoints([wallFloorMesh.position, currentLineEnd]);
       }
 
@@ -295,7 +294,11 @@
           if (hitTestResults.length > 0) {
             const hit = hitTestResults[0];
             currentHitMatrix = hit.getPose(referenceSpace).transform.matrix;
-            if (step !== "done") resultEl.textContent = "공간 인식 성공! 확정 버튼을 누르세요.";
+            if (step !== "done" && step !== "placeImage") {
+              resultEl.textContent = "공간 인식 성공! 확정 버튼을 누르세요.";
+            } else if (step === "placeImage") {
+              resultEl.innerHTML = savedDistanceText + "<br>벽면을 비추며 부착할 위치를 정하세요.";
+            }
           } else {
             currentHitMatrix = null;
             if (step !== "done") resultEl.textContent = "평면을 탐색 중입니다...";
