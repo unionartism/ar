@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
-  <title>벽면 거리 측정 MVP</title>
+  <title>벽면 거리 측정 MVP - pseudo AR anchor</title>
 
   <style>
     * {
@@ -191,7 +191,8 @@
       </div>
 
       <div class="row">
-        <button id="flip-btn" class="secondary">각도 방향 반전</button>
+        <button id="flip-pitch-btn" class="secondary">상하 방향 반전</button>
+        <button id="flip-yaw-btn" class="secondary">좌우 방향 반전</button>
         <button id="reset-btn" class="danger">초기화</button>
       </div>
 
@@ -220,7 +221,8 @@
     const fovInput = document.getElementById("fov");
 
     const actionBtn = document.getElementById("action-btn");
-    const flipBtn = document.getElementById("flip-btn");
+    const flipPitchBtn = document.getElementById("flip-pitch-btn");
+    const flipYawBtn = document.getElementById("flip-yaw-btn");
     const resetBtn = document.getElementById("reset-btn");
 
     const RAD = Math.PI / 180;
@@ -230,11 +232,16 @@
     let sensorStarted = false;
 
     let orientationCount = 0;
+
     let currentPitch = null;
+    let currentYaw = null;
+
     let currentBeta = null;
     let currentGamma = null;
+    let currentAlpha = null;
 
-    let angleSign = 1;
+    let pitchSign = 1;
+    let yawSign = 1;
 
     /*
       step:
@@ -254,6 +261,10 @@
     let toeDistanceCm = null;
     let finalDistanceCm = null;
     let imageCenterHeightCm = null;
+
+    function isNumber(v) {
+      return typeof v === "number" && Number.isFinite(v);
+    }
 
     function updateCameraHeightEstimate() {
       const userHeight = parseFloat(userHeightInput.value) || 170;
@@ -369,13 +380,28 @@
     function handleOrientation(event) {
       orientationCount++;
 
-      if (typeof event.beta === "number") {
+      if (isNumber(event.beta)) {
         currentPitch = event.beta;
         currentBeta = event.beta;
       }
 
-      if (typeof event.gamma === "number") {
+      if (isNumber(event.gamma)) {
         currentGamma = event.gamma;
+      }
+
+      if (isNumber(event.alpha)) {
+        currentAlpha = event.alpha;
+      }
+
+      /*
+        iOS Safari에는 webkitCompassHeading이 들어오는 경우가 있음.
+        있으면 이것을 우선 사용.
+        없으면 alpha를 사용.
+      */
+      if (isNumber(event.webkitCompassHeading)) {
+        currentYaw = event.webkitCompassHeading;
+      } else if (isNumber(event.alpha)) {
+        currentYaw = event.alpha;
       }
     }
 
@@ -384,12 +410,12 @@
     }
 
     /*
-      fromPitch에서 targetPitch까지 내려다보는 각도.
-      기기마다 방향이 반대일 수 있어서 angleSign으로 보정.
+      거리 계산용 상하 각도.
+      imagePoint를 수평 기준으로 보고, targetPitch가 얼마나 아래쪽인지 계산.
     */
     function signedDownAngleDeg(fromPitch, targetPitch) {
-      if (fromPitch === null || targetPitch === null) return null;
-      return angleSign * angleDiffDeg(fromPitch, targetPitch);
+      if (!isNumber(fromPitch) || !isNumber(targetPitch)) return null;
+      return pitchSign * angleDiffDeg(fromPitch, targetPitch);
     }
 
     function absDownAngleDeg(fromPitch, targetPitch) {
@@ -408,7 +434,6 @@
 
       const cameraHeight = getCameraHeightCm();
 
-      // 이미지 배치 지점은 카메라 눈높이와 같은 수평 기준이라고 가정
       const downAngle = absDownAngleDeg(imagePoint.pitch, targetPitch);
 
       if (downAngle === null) {
@@ -451,22 +476,32 @@
       imageCenterHeightCm = getCameraHeightCm();
     }
 
+    function makeAnchor(label) {
+      return {
+        label,
+        pitch: currentPitch,
+        yaw: currentYaw
+      };
+    }
+
     function confirmCurrentStep() {
       if (step === "ready") {
         startApp();
         return;
       }
 
-      if (currentPitch === null) {
-        resultEl.textContent = "센서값이 아직 없습니다. 휴대폰을 살짝 움직인 뒤 다시 눌러주세요.";
+      if (!isNumber(currentPitch)) {
+        resultEl.textContent = "상하 센서값이 아직 없습니다. 휴대폰을 살짝 움직인 뒤 다시 눌러주세요.";
+        return;
+      }
+
+      if (!isNumber(currentYaw)) {
+        resultEl.textContent = "좌우 센서값이 아직 없습니다. 휴대폰을 살짝 좌우로 움직인 뒤 다시 눌러주세요.";
         return;
       }
 
       if (step === "imagePoint") {
-        imagePoint = {
-          pitch: currentPitch,
-          label: "이미지 위치"
-        };
+        imagePoint = makeAnchor("이미지 위치");
 
         wallFloorPoint = null;
         toePoint = null;
@@ -497,12 +532,9 @@
           return;
         }
 
-        wallFloorPoint = {
-          pitch: currentPitch,
-          label: "벽/바닥선",
-          distanceCm: estimate.distance,
-          downAngle: estimate.downAngle
-        };
+        wallFloorPoint = makeAnchor("벽/바닥선");
+        wallFloorPoint.distanceCm = estimate.distance;
+        wallFloorPoint.downAngle = estimate.downAngle;
 
         wallDistanceCm = estimate.distance;
 
@@ -530,12 +562,9 @@
           return;
         }
 
-        toePoint = {
-          pitch: currentPitch,
-          label: "발끝",
-          distanceCm: estimate.distance,
-          downAngle: estimate.downAngle
-        };
+        toePoint = makeAnchor("발끝");
+        toePoint.distanceCm = estimate.distance;
+        toePoint.downAngle = estimate.downAngle;
 
         toeDistanceCm = estimate.distance;
         finalDistanceCm = Math.abs(wallDistanceCm - toeDistanceCm);
@@ -546,8 +575,8 @@
 
         setStep(
           "측정 완료",
-          "결과를 확인하세요. 다시 측정하려면 초기화를 누르세요.",
-          "다시 확인"
+          "카메라를 좌우/상하로 움직여보세요. 저장한 지점들이 중앙에 붙어 있지 않고 방향에 따라 이동해야 합니다.",
+          "결과 다시 보기"
         );
 
         resultEl.innerHTML = `
@@ -587,6 +616,12 @@
       finalDistanceCm = Math.abs(wallDistanceCm - toeDistanceCm);
       estimateWallImageHeight();
 
+      wallFloorPoint.distanceCm = wall.distance;
+      wallFloorPoint.downAngle = wall.downAngle;
+
+      toePoint.distanceCm = toe.distance;
+      toePoint.downAngle = toe.downAngle;
+
       resultEl.innerHTML = `
         벽/바닥선까지: <strong>${Math.round(wallDistanceCm)}cm</strong><br>
         발끝까지: <strong>${Math.round(toeDistanceCm)}cm</strong><br>
@@ -623,31 +658,77 @@
       draw();
     }
 
-    function flipDirection() {
-      angleSign *= -1;
+    function flipPitchDirection() {
+      pitchSign *= -1;
       recompute();
 
-      resultEl.innerHTML += `<br><span class="notice">각도 방향: ${angleSign === 1 ? "기본" : "반전"}</span>`;
+      resultEl.innerHTML += `<br><span class="notice">상하 방향: ${pitchSign === 1 ? "기본" : "반전"}</span>`;
+      draw();
+    }
+
+    function flipYawDirection() {
+      yawSign *= -1;
+
+      resultEl.innerHTML += `<br><span class="notice">좌우 방향: ${yawSign === 1 ? "기본" : "반전"}</span>`;
       draw();
     }
 
     actionBtn.addEventListener("click", confirmCurrentStep);
     resetBtn.addEventListener("click", resetAll);
-    flipBtn.addEventListener("click", flipDirection);
+    flipPitchBtn.addEventListener("click", flipPitchDirection);
+    flipYawBtn.addEventListener("click", flipYawDirection);
 
-    function projectPitchToScreenY(targetPitch) {
-      if (currentPitch === null || targetPitch === null) return null;
+    function getVerticalFovRad() {
+      return (parseFloat(fovInput.value) || 60) * RAD;
+    }
 
+    function getHorizontalFovRad() {
+      const aspect = window.innerWidth / window.innerHeight;
+      const vFov = getVerticalFovRad();
+
+      return 2 * Math.atan(Math.tan(vFov / 2) * aspect);
+    }
+
+    function projectAnchorToScreen(anchor) {
+      if (!anchor || !isNumber(currentPitch) || !isNumber(currentYaw)) {
+        return null;
+      }
+
+      const w = window.innerWidth;
       const h = window.innerHeight;
-      const verticalFov = (parseFloat(fovInput.value) || 60) * RAD;
+      const cx = w / 2;
+      const cy = h / 2;
 
-      const deltaDeg = signedDownAngleDeg(currentPitch, targetPitch);
+      const hFov = getHorizontalFovRad();
+      const vFov = getVerticalFovRad();
 
-      if (deltaDeg === null) return null;
+      const deltaYawDeg = yawSign * angleDiffDeg(anchor.yaw, currentYaw);
+      const deltaPitchDeg = pitchSign * angleDiffDeg(currentPitch, anchor.pitch);
 
-      const offsetY = Math.tan(deltaDeg * RAD) / Math.tan(verticalFov / 2) * (h / 2);
+      const x = cx + Math.tan(deltaYawDeg * RAD) / Math.tan(hFov / 2) * (w / 2);
+      const y = cy + Math.tan(deltaPitchDeg * RAD) / Math.tan(vFov / 2) * (h / 2);
 
-      return h / 2 + offsetY;
+      return {
+        x,
+        y,
+        deltaYawDeg,
+        deltaPitchDeg,
+        visible:
+          Math.abs(deltaYawDeg) < 80 &&
+          Math.abs(deltaPitchDeg) < 80 &&
+          x > -120 &&
+          x < w + 120 &&
+          y > -120 &&
+          y < h + 120
+      };
+    }
+
+    function getCurrentCenterAnchor(label = "현재 조준점") {
+      return {
+        label,
+        pitch: currentPitch,
+        yaw: currentYaw
+      };
     }
 
     function drawCrosshair() {
@@ -681,24 +762,20 @@
       ctx.shadowColor = color;
       ctx.shadowBlur = 12;
 
-      // 긴 수평선
       ctx.beginPath();
       ctx.moveTo(w * 0.12, cy);
       ctx.lineTo(w * 0.88, cy);
       ctx.stroke();
 
-      // 짧은 수직선
       ctx.beginPath();
       ctx.moveTo(cx, cy - 70);
       ctx.lineTo(cx, cy + 70);
       ctx.stroke();
 
-      // 중앙 원
       ctx.beginPath();
       ctx.arc(cx, cy, 25, 0, Math.PI * 2);
       ctx.stroke();
 
-      // 중앙 점
       ctx.beginPath();
       ctx.arc(cx, cy, 4, 0, Math.PI * 2);
       ctx.fill();
@@ -722,20 +799,17 @@
       ctx.restore();
     }
 
-    function drawStoredPoint(point, color) {
-      if (!point || currentPitch === null) return;
+    function drawStoredPoint(anchor, color) {
+      if (!anchor) return;
 
-      const w = window.innerWidth;
-      const cx = w / 2;
-      const y = projectPitchToScreenY(point.pitch);
+      const projected = projectAnchorToScreen(anchor);
+      if (!projected) return;
 
-      if (y === null) return;
+      const { x, y, visible } = projected;
 
       ctx.save();
 
-      const visible = y > -80 && y < window.innerHeight + 80;
-
-      ctx.globalAlpha = visible ? 1 : 0.35;
+      ctx.globalAlpha = visible ? 1 : 0.28;
       ctx.strokeStyle = color;
       ctx.fillStyle = color;
       ctx.lineWidth = 3;
@@ -743,34 +817,37 @@
       ctx.shadowBlur = 10;
 
       ctx.beginPath();
-      ctx.arc(cx, y, 10, 0, Math.PI * 2);
+      ctx.arc(x, y, 10, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.shadowBlur = 0;
+
       ctx.font = "bold 13px system-ui";
       ctx.textAlign = "left";
-      ctx.fillStyle = "#fff";
+
+      let label = anchor.label;
+
+      if (anchor.distanceCm) {
+        label += ` ${Math.round(anchor.distanceCm)}cm`;
+      }
+
       ctx.strokeStyle = "rgba(0,0,0,0.85)";
       ctx.lineWidth = 4;
+      ctx.strokeText(label, x + 16, y + 5);
 
-      const label = point.distanceCm
-        ? `${point.label} ${Math.round(point.distanceCm)}cm`
-        : point.label;
-
-      ctx.strokeText(label, cx + 16, y + 5);
-      ctx.fillText(label, cx + 16, y + 5);
+      ctx.fillStyle = "#fff";
+      ctx.fillText(label, x + 16, y + 5);
 
       ctx.restore();
     }
 
-    function drawTapeLine(fromPoint, toPitch, color, labelText) {
-      if (!fromPoint || currentPitch === null || toPitch === null) return;
+    function drawTapeLine(fromAnchor, toAnchor, color, labelText) {
+      if (!fromAnchor || !toAnchor) return;
 
-      const cx = window.innerWidth / 2;
-      const y1 = projectPitchToScreenY(fromPoint.pitch);
-      const y2 = projectPitchToScreenY(toPitch);
+      const p1 = projectAnchorToScreen(fromAnchor);
+      const p2 = projectAnchorToScreen(toAnchor);
 
-      if (y1 === null || y2 === null) return;
+      if (!p1 || !p2) return;
 
       ctx.save();
 
@@ -781,31 +858,40 @@
       ctx.shadowBlur = 12;
 
       ctx.beginPath();
-      ctx.moveTo(cx, y1);
-      ctx.lineTo(cx, y2);
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
       ctx.stroke();
 
-      // 줄자 눈금
       ctx.shadowBlur = 0;
-      const startY = Math.min(y1, y2);
-      const endY = Math.max(y1, y2);
-      const tickCount = 8;
 
-      ctx.lineWidth = 2;
+      const dx = p2.x - p1.x;
+      const dy = p2.y - p1.y;
+      const len = Math.sqrt(dx * dx + dy * dy);
 
-      for (let i = 0; i <= tickCount; i++) {
-        const t = i / tickCount;
-        const y = startY + (endY - startY) * t;
-        const tickLen = i % 2 === 0 ? 28 : 18;
+      if (len > 10) {
+        const nx = -dy / len;
+        const ny = dx / len;
 
-        ctx.beginPath();
-        ctx.moveTo(cx - tickLen / 2, y);
-        ctx.lineTo(cx + tickLen / 2, y);
-        ctx.stroke();
+        const tickCount = 8;
+
+        ctx.lineWidth = 2;
+
+        for (let i = 0; i <= tickCount; i++) {
+          const t = i / tickCount;
+          const x = p1.x + dx * t;
+          const y = p1.y + dy * t;
+          const tickLen = i % 2 === 0 ? 28 : 18;
+
+          ctx.beginPath();
+          ctx.moveTo(x - nx * tickLen / 2, y - ny * tickLen / 2);
+          ctx.lineTo(x + nx * tickLen / 2, y + ny * tickLen / 2);
+          ctx.stroke();
+        }
       }
 
       if (labelText) {
-        const midY = (y1 + y2) / 2;
+        const midX = (p1.x + p2.x) / 2;
+        const midY = (p1.y + p2.y) / 2;
 
         ctx.font = "bold 15px system-ui";
         ctx.textAlign = "center";
@@ -815,34 +901,34 @@
         const boxH = 30;
 
         ctx.fillStyle = "rgba(0,0,0,0.78)";
-        roundRect(ctx, cx - boxW / 2, midY - boxH / 2, boxW, boxH, 10);
+        roundRect(ctx, midX - boxW / 2, midY - boxH / 2, boxW, boxH, 10);
         ctx.fill();
 
         ctx.fillStyle = color;
-        ctx.fillText(labelText, cx, midY + 5);
+        ctx.fillText(labelText, midX, midY + 5);
       }
 
       ctx.restore();
     }
 
     function drawTape() {
-      const centerPitch = currentPitch;
+      const currentCenter = getCurrentCenterAnchor();
 
-      if (step === "wallFloor" && imagePoint && centerPitch !== null) {
-        drawTapeLine(imagePoint, centerPitch, "#00d4ff", "벽 아래로 측정");
+      if (step === "wallFloor" && imagePoint && isNumber(currentPitch) && isNumber(currentYaw)) {
+        drawTapeLine(imagePoint, currentCenter, "#00d4ff", "벽 아래로 측정");
       }
 
-      if (step === "toe" && wallFloorPoint && centerPitch !== null) {
-        drawTapeLine(wallFloorPoint, centerPitch, "#ffe600", "발끝까지 측정");
+      if (step === "toe" && wallFloorPoint && isNumber(currentPitch) && isNumber(currentYaw)) {
+        drawTapeLine(wallFloorPoint, currentCenter, "#ffe600", "발끝까지 측정");
       }
 
       if (step === "done") {
         if (imagePoint && wallFloorPoint) {
-          drawTapeLine(imagePoint, wallFloorPoint.pitch, "#00d4ff", "벽 높이 방향");
+          drawTapeLine(imagePoint, wallFloorPoint, "#00d4ff", "벽 높이 방향");
         }
 
         if (wallFloorPoint && toePoint) {
-          drawTapeLine(wallFloorPoint, toePoint.pitch, "#ffe600", `${Math.round(finalDistanceCm)}cm`);
+          drawTapeLine(wallFloorPoint, toePoint, "#ffe600", `${Math.round(finalDistanceCm)}cm`);
         }
       }
     }
@@ -853,12 +939,15 @@
         sensor: ${sensorStarted ? "on" : "off"} /
         camera: ${cameraStarted ? "on" : "off"} /
         events: ${orientationCount}<br>
-        beta: ${currentBeta !== null ? currentBeta.toFixed(1) : "-"} /
-        gamma: ${currentGamma !== null ? currentGamma.toFixed(1) : "-"} /
-        sign: ${angleSign}<br>
-        imagePitch: ${imagePoint ? imagePoint.pitch.toFixed(1) : "-"} /
-        wallPitch: ${wallFloorPoint ? wallFloorPoint.pitch.toFixed(1) : "-"} /
-        toePitch: ${toePoint ? toePoint.pitch.toFixed(1) : "-"}
+        alpha: ${isNumber(currentAlpha) ? currentAlpha.toFixed(1) : "-"} /
+        yaw: ${isNumber(currentYaw) ? currentYaw.toFixed(1) : "-"} /
+        beta: ${isNumber(currentBeta) ? currentBeta.toFixed(1) : "-"} /
+        gamma: ${isNumber(currentGamma) ? currentGamma.toFixed(1) : "-"}<br>
+        pitchSign: ${pitchSign} /
+        yawSign: ${yawSign}<br>
+        image: ${imagePoint ? `p${imagePoint.pitch.toFixed(1)} y${imagePoint.yaw.toFixed(1)}` : "-"} /
+        wall: ${wallFloorPoint ? `p${wallFloorPoint.pitch.toFixed(1)} y${wallFloorPoint.yaw.toFixed(1)}` : "-"} /
+        toe: ${toePoint ? `p${toePoint.pitch.toFixed(1)} y${toePoint.yaw.toFixed(1)}` : "-"}
       `;
     }
 
