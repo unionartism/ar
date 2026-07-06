@@ -1,837 +1,125 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
-  <title>벽-발끝 거리 측정 MVP</title>
-
-  <style>
-    * {
-      box-sizing: border-box;
-    }
-
-    html,
-    body {
-      margin: 0;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: #000;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-      color: #fff;
-    }
-
-    #app {
-      position: fixed;
-      inset: 0;
-      overflow: hidden;
-      background: #000;
-    }
-
-    video {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      background: #111;
-    }
-
-    canvas {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      touch-action: none;
-    }
-
-    .top {
-      position: absolute;
-      top: env(safe-area-inset-top, 0);
-      left: 0;
-      right: 0;
-      padding: 10px;
-      background: linear-gradient(to bottom, rgba(0,0,0,0.75), rgba(0,0,0,0));
-      pointer-events: none;
-    }
-
-    .title {
-      font-size: 15px;
-      font-weight: 700;
-      margin-bottom: 4px;
-    }
-
-    .status {
-      font-size: 13px;
-      line-height: 1.35;
-      opacity: 0.95;
-    }
-
-    .panel {
-      position: absolute;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      padding: 10px;
-      padding-bottom: calc(10px + env(safe-area-inset-bottom, 0));
-      background: rgba(0, 0, 0, 0.72);
-      backdrop-filter: blur(8px);
-    }
-
-    .row {
-      display: flex;
-      gap: 6px;
-      margin-bottom: 6px;
-    }
-
-    button,
-    input {
-      font: inherit;
-      border-radius: 8px;
-      border: 1px solid rgba(255,255,255,0.25);
-    }
-
-    button {
-      flex: 1;
-      padding: 10px 8px;
-      color: #fff;
-      background: #1d4ed8;
-      font-weight: 700;
-    }
-
-    button.secondary {
-      background: #374151;
-    }
-
-    button.warn {
-      background: #b45309;
-    }
-
-    button.danger {
-      background: #991b1b;
-    }
-
-    button:active {
-      transform: scale(0.98);
-    }
-
-    label {
-      flex: 1;
-      font-size: 11px;
-      color: rgba(255,255,255,0.78);
-    }
-
-    input {
-      width: 100%;
-      margin-top: 3px;
-      padding: 8px;
-      color: #fff;
-      background: rgba(255,255,255,0.1);
-    }
-
-    .result {
-      margin-top: 4px;
-      padding: 9px;
-      border-radius: 8px;
-      background: rgba(255,255,255,0.1);
-      font-size: 14px;
-      line-height: 1.35;
-    }
-
-    .debug {
-      margin-top: 5px;
-      font-size: 11px;
-      line-height: 1.35;
-      color: rgba(255,255,255,0.75);
-      word-break: break-all;
-    }
-
-    .badge {
-      display: inline-block;
-      padding: 2px 6px;
-      border-radius: 999px;
-      background: rgba(255,255,255,0.15);
-      font-size: 11px;
-      margin-right: 4px;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>기울기 기반 거리 측정기</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: sans-serif; background: #000; color: #fff; }
+        #camera-preview { width: 100vw; height: 100vh; object-fit: cover; position: absolute; z-index: 1; }
+        #ui-layer { position: absolute; z-index: 2; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: space-between; pointer-events: none; }
+        #crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 20px; height: 20px; border: 2px solid #00ff00; border-radius: 50%; pointer-events: none; }
+        #crosshair::after { content: ''; position: absolute; top: 9px; left: -5px; width: 30px; height: 2px; background: #00ff00; }
+        #crosshair::before { content: ''; position: absolute; top: -5px; left: 9px; width: 2px; height: 30px; background: #00ff00; }
+        .hud { background: rgba(0,0,0,0.7); padding: 15px; margin: 10px; border-radius: 8px; pointer-events: auto; }
+        button { background: #007aff; color: white; border: none; padding: 12px 20px; font-size: 16px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        button:active { background: #0051a8; }
+    </style>
 </head>
-
 <body>
-  <div id="app">
-    <video id="video" playsinline muted autoplay></video>
-    <canvas id="overlay"></canvas>
 
-    <div class="top">
-      <div class="title">거리 측정 테스트</div>
-      <div id="status" class="status">
-        1. 센서 권한 요청 → 2. 카메라 시작 → 3. 정면 기준 저장
-      </div>
+    <!-- 카메라 백그라운드 영상 -->
+    <video id="camera-preview" autoplay playsinline muted></video>
+
+    <!-- 조준점 (Crosshair) -->
+    <div id="crosshair"></div>
+
+    <!-- UI 레이어 -->
+    <div id="ui-layer">
+        <div class="hud" id="status-panel">
+            <h3>기울기 측정 가이드</h3>
+            <label>스마트폰 높이(cm): </label>
+            <input type="number" id="cam-height" value="150" style="width: 60px; text-align: center;"><br><br>
+            <div id="current-angle">현재 Pitch 각도: 0°</div>
+            <div id="calc-result" style="color: #00ff00; font-weight: bold; margin-top: 5px;">결과: -</div>
+        </div>
+
+        <div class="hud" style="text-align: center; margin-bottom: 30px;">
+            <button id="btn-action">센서 권한 요청</button>
+        </div>
     </div>
 
-    <div class="panel">
-      <div class="row">
-        <button id="sensorBtn">센서 권한 요청</button>
-        <button id="cameraBtn">카메라 시작</button>
-      </div>
+    <script>
+        const video = document.getElementById('camera-preview');
+        const btnAction = document.getElementById('btn-action');
+        const txtAngle = document.getElementById('current-angle');
+        const txtResult = document.getElementById('calc-result');
+        const inputHeight = document.getElementById('cam-height');
 
-      <div class="row">
-        <button id="referenceBtn" class="warn">정면 기준 저장</button>
-        <button id="resetBtn" class="secondary">초기화</button>
-      </div>
+        let currentPitch = 0; // 스마트폰의 상하 기울기 (Degree)
+        let step = 0;         // 0: 권한요청, 1: 벽면조준, 2: 발끝조준, 3: 완료
+        let d_wall = 0;       // 벽까지의 수평 거리
+        let d_feet = 0;       // 발끝까지의 수평 거리
 
-      <div class="row">
-        <label>
-          카메라 높이 cm
-          <input id="cameraHeightInput" type="number" value="150" min="80" max="220" step="1" />
-        </label>
+        // 1. 카메라 스트림 켜기
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+            .then(stream => { video.srcObject = stream; })
+            .catch(err => alert('카메라 접근 권한이 필요합니다: ' + err));
 
-        <label>
-          세로 화각
-          <input id="fovInput" type="number" value="60" min="35" max="90" step="1" />
-        </label>
+        // 2. iOS 센서 권한 대응 및 스텝별 트리거
+        btnAction.addEventListener('click', async () => {
+            if (step === 0) {
+                // iOS 13+ 권한 요청 처리
+                if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                    try {
+                        const permissionState = await DeviceOrientationEvent.requestPermission();
+                        if (permissionState === 'granted') {
+                            window.addEventListener('deviceorientation', handleOrientation);
+                            initStep1();
+                        } else {
+                            alert('센서 권한이 거부되었습니다.');
+                        }
+                    } catch (error) {
+                        alert('센서 요청 중 오류 발생: ' + error);
+                    }
+                } else {
+                    // Android 및 일반 브라우저
+                    window.addEventListener('deviceorientation', handleOrientation);
+                    initStep1();
+                }
+            } else if (step === 1) {
+                // [점 1] 벽면 하단 측정
+                const h = parseFloat(inputHeight.value);
+                // 삼각함수 공식: d = h * tan(θ)
+                // 기울기 각도를 라디안으로 변환 (정면이 0도 기준이 되도록 보정 필요)
+                const thetaRad = (90 - currentPitch) * (Math.PI / 180);
+                d_wall = h * Math.tan(thetaRad);
 
-        <label>
-          보정 배율
-          <input id="scaleInput" type="number" value="1.00" min="0.5" max="1.5" step="0.01" />
-        </label>
-      </div>
+                step = 2;
+                btnAction.innerText = "2단계: 발끝 조준 후 터치";
+                txtResult.innerText = `벽면 거리 계산됨: ${Math.round(d_wall)} cm`;
+            } else if (step === 2) {
+                // [점 2] 사용자 발끝 측정
+                const h = parseFloat(inputHeight.value);
+                const thetaRad = (90 - currentPitch) * (Math.PI / 180);
+                d_feet = h * Math.tan(thetaRad);
 
-      <div class="row">
-        <button id="flipBtn" class="secondary">각도 방향 반전</button>
-        <button id="manualWallBtn" class="secondary">다음: 벽/바닥선</button>
-        <button id="manualToeBtn" class="secondary">다음: 발끝</button>
-      </div>
+                const finalDistance = d_wall - d_feet;
 
-      <div id="result" class="result">
-        측정 거리: -
-      </div>
-
-      <div id="debug" class="debug">
-        sensor: 대기중
-      </div>
-    </div>
-  </div>
-
-  <script>
-    const video = document.getElementById("video");
-    const canvas = document.getElementById("overlay");
-    const ctx = canvas.getContext("2d");
-
-    const statusEl = document.getElementById("status");
-    const resultEl = document.getElementById("result");
-    const debugEl = document.getElementById("debug");
-
-    const sensorBtn = document.getElementById("sensorBtn");
-    const cameraBtn = document.getElementById("cameraBtn");
-    const referenceBtn = document.getElementById("referenceBtn");
-    const resetBtn = document.getElementById("resetBtn");
-    const flipBtn = document.getElementById("flipBtn");
-    const manualWallBtn = document.getElementById("manualWallBtn");
-    const manualToeBtn = document.getElementById("manualToeBtn");
-
-    const cameraHeightInput = document.getElementById("cameraHeightInput");
-    const fovInput = document.getElementById("fovInput");
-    const scaleInput = document.getElementById("scaleInput");
-
-    const RAD = Math.PI / 180;
-    const DEG = 180 / Math.PI;
-
-    let sensorPermissionRequested = false;
-    let cameraStarted = false;
-
-    let orientationCount = 0;
-    let motionCount = 0;
-
-    let orientation = {
-      alpha: null,
-      beta: null,
-      gamma: null
-    };
-
-    let motionGravity = {
-      x: null,
-      y: null,
-      z: null
-    };
-
-    let referencePitch = null;
-    let pitchSign = 1;
-
-    let mode = "idle";
-    let wallPoint = null;
-    let toePoint = null;
-    let measuredDistanceCm = null;
-
-    function setStatus(text) {
-      statusEl.textContent = text;
-    }
-
-    function resizeCanvas() {
-      const dpr = window.devicePixelRatio || 1;
-      canvas.width = Math.round(window.innerWidth * dpr);
-      canvas.height = Math.round(window.innerHeight * dpr);
-      canvas.style.width = window.innerWidth + "px";
-      canvas.style.height = window.innerHeight + "px";
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      draw();
-    }
-
-    window.addEventListener("resize", resizeCanvas);
-    window.addEventListener("orientationchange", () => {
-      setTimeout(resizeCanvas, 250);
-    });
-
-    resizeCanvas();
-
-    function isNumber(v) {
-      return typeof v === "number" && Number.isFinite(v);
-    }
-
-    function angleDiffDeg(a, b) {
-      // a - b 값을 -180 ~ 180 범위로 정규화
-      return ((a - b + 540) % 360) - 180;
-    }
-
-    function getMotionPitchDeg() {
-      const gx = motionGravity.x;
-      const gy = motionGravity.y;
-      const gz = motionGravity.z;
-
-      if (!isNumber(gx) || !isNumber(gy) || !isNumber(gz)) {
-        return null;
-      }
-
-      // iOS/Android 축 기준 차이를 줄이기 위한 근사값.
-      // 정밀한 절대각이 아니라 "정면 기준 저장 후 변화량"만 사용한다.
-      return Math.atan2(gz, -gy) * DEG;
-    }
-
-    function getRawPitchDeg() {
-      // 1순위: DeviceOrientationEvent.beta
-      if (isNumber(orientation.beta)) {
-        return orientation.beta;
-      }
-
-      // 2순위: DeviceMotionEvent.accelerationIncludingGravity
-      const motionPitch = getMotionPitchDeg();
-      if (isNumber(motionPitch)) {
-        return motionPitch;
-      }
-
-      return null;
-    }
-
-    function getSensorSource() {
-      if (isNumber(orientation.beta)) return "orientation.beta";
-      if (isNumber(getMotionPitchDeg())) return "motion.gravity";
-      return "none";
-    }
-
-    function getCameraDownAngleDeg() {
-      const rawPitch = getRawPitchDeg();
-
-      if (!isNumber(rawPitch) || !isNumber(referencePitch)) {
-        return null;
-      }
-
-      // 정면 기준 대비 현재 카메라가 아래를 보는 각도
-      return pitchSign * angleDiffDeg(referencePitch, rawPitch);
-    }
-
-    function getPixelOffsetAngleDeg(y) {
-      const h = window.innerHeight;
-      const verticalFovDeg = Number(fovInput.value) || 60;
-      const verticalFovRad = verticalFovDeg * RAD;
-
-      // 화면 중앙 기준:
-      // y가 아래쪽이면 양수, 위쪽이면 음수
-      const normalizedY = (y - h / 2) / (h / 2);
-      const angleRad = Math.atan(normalizedY * Math.tan(verticalFovRad / 2));
-
-      return angleRad * DEG;
-    }
-
-    function estimateGroundDistanceCm(y) {
-      const cameraHeightCm = Number(cameraHeightInput.value) || 150;
-      const correctionScale = Number(scaleInput.value) || 1;
-
-      const cameraDownDeg = getCameraDownAngleDeg();
-
-      if (!isNumber(cameraDownDeg)) {
-        return {
-          ok: false,
-          error: "정면 기준 또는 센서값이 없습니다.",
-          distanceCm: null,
-          rayDownDeg: null,
-          cameraDownDeg: null,
-          pixelOffsetDeg: null
-        };
-      }
-
-      const pixelOffsetDeg = getPixelOffsetAngleDeg(y);
-
-      // 실제 터치 지점을 향한 광선이 수평선 아래로 내려간 각도
-      const rayDownDeg = cameraDownDeg + pixelOffsetDeg;
-
-      if (rayDownDeg <= 1) {
-        return {
-          ok: false,
-          error: "터치 지점이 수평선보다 충분히 아래에 있지 않습니다.",
-          distanceCm: null,
-          rayDownDeg,
-          cameraDownDeg,
-          pixelOffsetDeg
-        };
-      }
-
-      if (rayDownDeg >= 89) {
-        return {
-          ok: false,
-          error: "각도가 너무 큽니다. 카메라를 조금 더 멀리 향해보세요.",
-          distanceCm: null,
-          rayDownDeg,
-          cameraDownDeg,
-          pixelOffsetDeg
-        };
-      }
-
-      const distanceCm = cameraHeightCm / Math.tan(rayDownDeg * RAD) * correctionScale;
-
-      return {
-        ok: true,
-        error: null,
-        distanceCm,
-        rayDownDeg,
-        cameraDownDeg,
-        pixelOffsetDeg
-      };
-    }
-
-    function updateMeasuredDistance() {
-      if (!wallPoint || !toePoint) {
-        measuredDistanceCm = null;
-        resultEl.innerHTML = "측정 거리: -";
-        return;
-      }
-
-      const wall = estimateGroundDistanceCm(wallPoint.y);
-      const toe = estimateGroundDistanceCm(toePoint.y);
-
-      wallPoint.estimate = wall;
-      toePoint.estimate = toe;
-
-      if (!wall.ok || !toe.ok) {
-        measuredDistanceCm = null;
-        resultEl.innerHTML = `
-          <strong>측정 실패</strong><br>
-          벽/바닥선: ${wall.error || "-"}<br>
-          발끝: ${toe.error || "-"}
-        `;
-        return;
-      }
-
-      measuredDistanceCm = Math.abs(wall.distanceCm - toe.distanceCm);
-
-      resultEl.innerHTML = `
-        <strong>측정 거리: ${Math.round(measuredDistanceCm)} cm</strong><br>
-        <span class="badge">벽/바닥선 ${Math.round(wall.distanceCm)}cm</span>
-        <span class="badge">발끝 ${Math.round(toe.distanceCm)}cm</span>
-      `;
-    }
-
-    async function requestSensors() {
-      try {
-        let motionResult = "not-needed";
-        let orientationResult = "not-needed";
-
-        // iOS 13+ Motion 권한
-        if (
-          typeof DeviceMotionEvent !== "undefined" &&
-          typeof DeviceMotionEvent.requestPermission === "function"
-        ) {
-          motionResult = await DeviceMotionEvent.requestPermission();
-        }
-
-        // iOS 13+ Orientation 권한
-        if (
-          typeof DeviceOrientationEvent !== "undefined" &&
-          typeof DeviceOrientationEvent.requestPermission === "function"
-        ) {
-          orientationResult = await DeviceOrientationEvent.requestPermission();
-        }
-
-        window.addEventListener("deviceorientation", handleOrientation, true);
-        window.addEventListener("devicemotion", handleMotion, true);
-
-        sensorPermissionRequested = true;
-
-        setStatus(
-          `센서 권한 요청 완료. motion: ${motionResult}, orientation: ${orientationResult}`
-        );
-      } catch (err) {
-        setStatus("센서 권한 요청 실패: " + err.message);
-      }
-    }
-
-    async function startCamera() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: "environment" },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 }
-          },
-          audio: false
+                step = 1; // 다시 측정할 수 있도록 1단계로 순환
+                btnAction.innerText = "1단계: 벽면 바닥 조준 후 터치";
+                txtResult.innerHTML = `
+                    벽면까지: ${Math.round(d_wall)}cm<br>
+                    발끝까지: ${Math.round(d_feet)}cm<br>
+                    <span style="font-size:1.2em; color:#ffff00;">★ 실제 측정 거리: ${Math.round(Math.abs(finalDistance))} cm</span>
+                `;
+            }
         });
 
-        video.srcObject = stream;
-        await video.play();
-
-        cameraStarted = true;
-        setStatus("카메라 시작됨. 벽 눈높이를 정면으로 비추고 '정면 기준 저장'을 누르세요.");
-      } catch (err) {
-        setStatus("카메라 시작 실패: " + err.message);
-      }
-    }
-
-    function handleOrientation(event) {
-      orientationCount++;
-
-      orientation.alpha = isNumber(event.alpha) ? event.alpha : null;
-      orientation.beta = isNumber(event.beta) ? event.beta : null;
-      orientation.gamma = isNumber(event.gamma) ? event.gamma : null;
-    }
-
-    function handleMotion(event) {
-      motionCount++;
-
-      const g = event.accelerationIncludingGravity;
-
-      if (g) {
-        motionGravity.x = isNumber(g.x) ? g.x : null;
-        motionGravity.y = isNumber(g.y) ? g.y : null;
-        motionGravity.z = isNumber(g.z) ? g.z : null;
-      }
-    }
-
-    function saveReference() {
-      const rawPitch = getRawPitchDeg();
-
-      if (!isNumber(rawPitch)) {
-        setStatus("센서값이 아직 없습니다. 센서 권한 요청 후 휴대폰을 살짝 움직여보세요.");
-        return;
-      }
-
-      referencePitch = rawPitch;
-      mode = "wall";
-
-      wallPoint = null;
-      toePoint = null;
-      measuredDistanceCm = null;
-
-      setStatus("정면 기준 저장됨. 이제 벽과 바닥이 만나는 선/점을 터치하세요.");
-      updateMeasuredDistance();
-      draw();
-    }
-
-    function resetMeasurement() {
-      mode = "idle";
-      wallPoint = null;
-      toePoint = null;
-      measuredDistanceCm = null;
-      referencePitch = null;
-
-      resultEl.innerHTML = "측정 거리: -";
-      setStatus("초기화됨. 벽 눈높이를 정면으로 비추고 '정면 기준 저장'을 누르세요.");
-      draw();
-    }
-
-    function flipAngleSign() {
-      pitchSign *= -1;
-      updateMeasuredDistance();
-
-      setStatus(
-        pitchSign === 1
-          ? "각도 방향: 기본"
-          : "각도 방향: 반전"
-      );
-
-      draw();
-    }
-
-    function getCanvasTouchPoint(event) {
-      const rect = canvas.getBoundingClientRect();
-      const touch = event.touches ? event.touches[0] : event;
-
-      return {
-        x: touch.clientX - rect.left,
-        y: touch.clientY - rect.top
-      };
-    }
-
-    canvas.addEventListener("touchstart", handlePointer, { passive: false });
-    canvas.addEventListener("mousedown", handlePointer);
-
-    function handlePointer(event) {
-      event.preventDefault();
-
-      if (!referencePitch) {
-        setStatus("먼저 벽 눈높이를 정면으로 비추고 '정면 기준 저장'을 누르세요.");
-        return;
-      }
-
-      const p = getCanvasTouchPoint(event);
-      const estimate = estimateGroundDistanceCm(p.y);
-
-      if (mode === "idle") {
-        mode = "wall";
-      }
-
-      if (mode === "wall") {
-        wallPoint = {
-          x: p.x,
-          y: p.y,
-          estimate
-        };
-
-        mode = "toe";
-        setStatus("벽/바닥선 저장됨. 이제 발끝 위치를 터치하세요.");
-      } else if (mode === "toe") {
-        toePoint = {
-          x: p.x,
-          y: p.y,
-          estimate
-        };
-
-        mode = "done";
-        setStatus("발끝 저장됨. 거리 계산 결과를 확인하세요.");
-      } else if (mode === "done") {
-        // 완료 후 다시 터치하면 발끝을 갱신
-        toePoint = {
-          x: p.x,
-          y: p.y,
-          estimate
-        };
-
-        setStatus("발끝 위치를 다시 저장했습니다.");
-      }
-
-      updateMeasuredDistance();
-      draw();
-    }
-
-    function drawPoint(point, label, color) {
-      if (!point) return;
-
-      ctx.save();
-
-      ctx.fillStyle = color;
-      ctx.strokeStyle = "#000";
-      ctx.lineWidth = 3;
-
-      ctx.beginPath();
-      ctx.arc(point.x, point.y, 8, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.font = "bold 13px system-ui";
-      ctx.fillStyle = "#fff";
-      ctx.strokeStyle = "rgba(0,0,0,0.75)";
-      ctx.lineWidth = 4;
-      ctx.strokeText(label, point.x + 12, point.y - 12);
-      ctx.fillText(label, point.x + 12, point.y - 12);
-
-      if (point.estimate && point.estimate.ok) {
-        const text = `${Math.round(point.estimate.distanceCm)}cm`;
-        ctx.font = "12px system-ui";
-        ctx.strokeText(text, point.x + 12, point.y + 8);
-        ctx.fillText(text, point.x + 12, point.y + 8);
-      }
-
-      ctx.restore();
-    }
-
-    function drawGuide() {
-      const w = window.innerWidth;
-      const h = window.innerHeight;
-      const cx = w / 2;
-      const cy = h / 2;
-
-      ctx.save();
-
-      // 중앙 십자
-      ctx.strokeStyle = "rgba(255,255,255,0.75)";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(cx - 18, cy);
-      ctx.lineTo(cx + 18, cy);
-      ctx.moveTo(cx, cy - 18);
-      ctx.lineTo(cx, cy + 18);
-      ctx.stroke();
-
-      // 수평 기준선
-      ctx.strokeStyle = "rgba(0,255,150,0.85)";
-      ctx.lineWidth = 2;
-      ctx.setLineDash([8, 8]);
-      ctx.beginPath();
-      ctx.moveTo(18, cy);
-      ctx.lineTo(w - 18, cy);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      // 안내 문구
-      let guideText = "정면 기준 저장 후 벽/바닥선과 발끝을 터치하세요.";
-
-      if (mode === "wall") {
-        guideText = "벽과 바닥이 만나는 선/점을 터치하세요.";
-      } else if (mode === "toe") {
-        guideText = "발끝 위치를 터치하세요.";
-      } else if (mode === "done") {
-        guideText = "측정 완료. 다시 터치하면 발끝 위치를 갱신합니다.";
-      }
-
-      ctx.font = "bold 15px system-ui";
-      ctx.textAlign = "center";
-      ctx.fillStyle = "#fff";
-      ctx.strokeStyle = "rgba(0,0,0,0.75)";
-      ctx.lineWidth = 4;
-      ctx.strokeText(guideText, cx, cy - 34);
-      ctx.fillText(guideText, cx, cy - 34);
-
-      ctx.restore();
-    }
-
-    function drawConnection() {
-      if (!wallPoint || !toePoint) return;
-
-      ctx.save();
-
-      ctx.strokeStyle = "rgba(255,255,255,0.95)";
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(wallPoint.x, wallPoint.y);
-      ctx.lineTo(toePoint.x, toePoint.y);
-      ctx.stroke();
-
-      const mx = (wallPoint.x + toePoint.x) / 2;
-      const my = (wallPoint.y + toePoint.y) / 2;
-
-      if (isNumber(measuredDistanceCm)) {
-        const text = `${Math.round(measuredDistanceCm)} cm`;
-
-        ctx.font = "bold 20px system-ui";
-        ctx.textAlign = "center";
-
-        const paddingX = 10;
-        const paddingY = 7;
-        const metrics = ctx.measureText(text);
-        const boxW = metrics.width + paddingX * 2;
-        const boxH = 34;
-
-        ctx.fillStyle = "rgba(0,0,0,0.75)";
-        ctx.beginPath();
-        ctx.roundRect(mx - boxW / 2, my - boxH / 2, boxW, boxH, 8);
-        ctx.fill();
-
-        ctx.fillStyle = "#fff";
-        ctx.fillText(text, mx, my + 7);
-      }
-
-      ctx.restore();
-    }
-
-    function draw() {
-      ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
-
-      drawGuide();
-      drawConnection();
-      drawPoint(wallPoint, "벽/바닥선", "#22c55e");
-      drawPoint(toePoint, "발끝", "#facc15");
-    }
-
-    function updateDebug() {
-      const rawPitch = getRawPitchDeg();
-      const motionPitch = getMotionPitchDeg();
-      const cameraDown = getCameraDownAngleDeg();
-
-      debugEl.innerHTML = `
-        sensorPermission: ${sensorPermissionRequested ? "requested" : "not requested"} /
-        camera: ${cameraStarted ? "on" : "off"}<br>
-        source: ${getSensorSource()} /
-        orientation events: ${orientationCount} /
-        motion events: ${motionCount}<br>
-        alpha: ${isNumber(orientation.alpha) ? orientation.alpha.toFixed(1) : "-"} /
-        beta: ${isNumber(orientation.beta) ? orientation.beta.toFixed(1) : "-"} /
-        gamma: ${isNumber(orientation.gamma) ? orientation.gamma.toFixed(1) : "-"}<br>
-        gravity x: ${isNumber(motionGravity.x) ? motionGravity.x.toFixed(2) : "-"} /
-        y: ${isNumber(motionGravity.y) ? motionGravity.y.toFixed(2) : "-"} /
-        z: ${isNumber(motionGravity.z) ? motionGravity.z.toFixed(2) : "-"}<br>
-        rawPitch: ${isNumber(rawPitch) ? rawPitch.toFixed(1) : "-"} /
-        motionPitch: ${isNumber(motionPitch) ? motionPitch.toFixed(1) : "-"} /
-        reference: ${isNumber(referencePitch) ? referencePitch.toFixed(1) : "-"} /
-        cameraDown: ${isNumber(cameraDown) ? cameraDown.toFixed(1) : "-"} /
-        sign: ${pitchSign}
-      `;
-    }
-
-    sensorBtn.addEventListener("click", requestSensors);
-    cameraBtn.addEventListener("click", startCamera);
-    referenceBtn.addEventListener("click", saveReference);
-    resetBtn.addEventListener("click", resetMeasurement);
-    flipBtn.addEventListener("click", flipAngleSign);
-
-    manualWallBtn.addEventListener("click", () => {
-      mode = "wall";
-      setStatus("다음 터치: 벽과 바닥이 만나는 선/점");
-      draw();
-    });
-
-    manualToeBtn.addEventListener("click", () => {
-      mode = "toe";
-      setStatus("다음 터치: 발끝 위치");
-      draw();
-    });
-
-    cameraHeightInput.addEventListener("input", () => {
-      updateMeasuredDistance();
-      draw();
-    });
-
-    fovInput.addEventListener("input", () => {
-      updateMeasuredDistance();
-      draw();
-    });
-
-    scaleInput.addEventListener("input", () => {
-      updateMeasuredDistance();
-      draw();
-    });
-
-    function loop() {
-      updateDebug();
-      draw();
-      requestAnimationFrame(loop);
-    }
-
-    loop();
-
-    // 일부 구형 브라우저용 roundRect fallback
-    if (!CanvasRenderingContext2D.prototype.roundRect) {
-      CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
-        if (w < 2 * r) r = w / 2;
-        if (h < 2 * r) r = h / 2;
-
-        this.beginPath();
-        this.moveTo(x + r, y);
-        this.arcTo(x + w, y, x + w, y + h, r);
-        this.arcTo(x + w, y + h, x, y + h, r);
-        this.arcTo(x, y + h, x, y, r);
-        this.arcTo(x, y, x + w, y, r);
-        this.closePath();
-        return this;
-      };
-    }
-  </script>
+        function initStep1() {
+            step = 1;
+            btnAction.innerText = "1단계: 벽면 바닥 조준 후 터치";
+        }
+
+        // 3. 자이로스코프 센서 데이터 처리 (Pitch 추출)
+        function handleOrientation(event) {
+            // event.beta: 스마트폰을 세웠을 때 앞뒤로 기울어지는 각도 (-180 ~ 180)
+            // 기종 및 파지법에 따라 정면을 바라볼 때 보통 70~90도 사이를 가집니다.
+            if (event.beta !== null) {
+                currentPitch = event.beta;
+                txtAngle.innerText = `현재 Pitch 각도: ${Math.round(currentPitch)}°`;
+            }
+        }
+    </script>
 </body>
 </html>
