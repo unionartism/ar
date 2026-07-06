@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
-    <title>벽면 거리 측정 및 지정 위치 이미지 배치 AR 다시</title>
+    <title>벽면 거리 측정 및 지정 위치 이미지 배치 AR 완성형</title>
 
     <style>
         * {
@@ -281,7 +281,7 @@
                 stepTitle.textContent = "3단계: 벽면 이미지 배치";
                 stepTitle.style.color = "#ff00ff";
                 crosshair.style.borderColor = "#ff00ff";
-                guideText.textContent = "원하는 벽면 정면 위치를 바라보고 조준점을 맞춘 뒤 버튼을 눌러 이미지를 부착하세요.";
+                guideText.textContent = "정면(벽면 높이)을 유저의 눈높이로 조준하고 버튼을 눌러 이미지를 부착하세요.";
                 actionBtn.textContent = "여기에 이미지 부착";
                 actionBtn.style.background = "#ff00ff";
                 actionBtn.style.color = "#fff";
@@ -297,7 +297,8 @@
         }
 
         function onActionTriggered() {
-            if (!currentHitMatrix) {
+            // 3단계(이미지 배치)일 때는 실시간 hitMatrix 맵핑이 안 되어 있어도 패스하도록 방어 조건 수정
+            if (!currentHitMatrix && step !== "placeImage") {
                 alert("공간 분석 대기 중입니다. 평평한 곳을 비춰주세요.");
                 return;
             }
@@ -335,40 +336,37 @@
                 const distanceInCm = Math.round(distanceInMeters * 100);
                 savedDistanceText = `<span style="font-size:1.2em; color:#ffe600; font-weight:bold;">★ 벽 ↔ 발끝 거리: ${distanceInCm}cm</span>`;
 
-                resultEl.innerHTML = savedDistanceText + "<br><span style='color:#ff00ff;'>이제 벽면 정면에 이미지를 부착할 차례입니다.</span>";
+                resultEl.innerHTML = savedDistanceText + "<br><span style='color:#ff00ff;'>원하는 벽면 높이(정면)를 바라보고 버튼을 누르세요!</span>";
                 setStep("placeImage");
 
-                // ... 기존 코드 생략 (1단계, 2단계 로직은 그대로 유지)
-
             } else if (step === "placeImage") {
-                // [개선안] 새로운 hit-test를 쓰지 않고, 1단계에서 확보한 확실한 벽면 기준점을 재활용합니다.
+                // 3단계: 이제 센서가 정면 평면을 인식하든 못하든 100% 무조건 실행됩니다.
                 const textureLoader = new THREE.TextureLoader();
                 textureLoader.load(IMAGE_URL, (texture) => {
                     const imageGeometry = new THREE.PlaneGeometry(TARGET_IMAGE_WIDTH_M, TARGET_IMAGE_HEIGHT_M);
                     const imageMaterial = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
                     imagePlane = new THREE.Mesh(imageGeometry, imageMaterial);
 
-                    // 1. 기준 위치를 1단계 '벽/바닥선 모서리'로 강제 지정 (이미 검증된 절대 좌표)
+                    // 1. 이미 검증된 1단계 '벽/바닥선 모서리'의 X, Z 평면 좌표를 그대로 계승합니다.
                     imagePlane.position.copy(wallFloorMesh.position);
 
-                    // 2. [수학적 보정] 유저가 3단계 버튼을 누른 순간, 카메라가 바라보고 있는 방향의 높이(Y축)를 계산
-                    // 사용자가 고개를 들어 정면을 보면 camera.position.y와 조준점 벡터에 의해 가상 높이가 잡힙니다.
-                    // 여기서는 레이캐스팅 대용으로 현재 카메라가 바라보는 높이 레이어를 융합하거나, 
-                    // 벽면 모서리(바닥)로부터 사용자가 눈높이로 배치하고 싶어하는 표준 높이(예: 바닥에서 1.2m 위)를 수식으로 지정할 수 있습니다.
+                    // 2. 높이(Y축)는 버튼을 누르는 순간 유저가 폰을 들고 있는 눈높이(camera.position.y)로 강제 고정합니다.
+                    imagePlane.position.y = camera.position.y;
 
-                    // 가장 직관적인 UX: 벽면 모서리 정중앙 라인에서 딱 눈높이(약 1.2m~1.4m) 혹은 원하는 높이만큼 수직 상승시킵니다.
-                    // 만약 사용자가 카메라를 든 높이를 반영하고 싶다면 아래와 같이 세팅합니다.
-                    imagePlane.position.y = camera.position.y; // 폰 높이와 일치시켜 눈높이 벽면에 강제 고정
+                    // 3. 실제 벽면에 파묻히는 Z-fighting 현상을 방지하기 위해 사용자가 서 있는 쪽 방향으로 미세하게 당겨옵니다.
+                    // 카메라 방향 벡터를 구해서 그 방향으로 0.01m(1cm) 앞으로 나오게 계산합니다.
+                    const forward = new THREE.Vector3();
+                    camera.getWorldDirection(forward);
+                    forward.y = 0; // 수평축으로만 이동 유도
+                    forward.normalize();
+                    imagePlane.position.addScaledVector(forward, -0.01); // 카메라 반대(벽 앞면) 방향 보정
 
-                    // Z-fighting(벽면 겹침 현상)을 막기 위해 벽면보다 1cm 앞으로 빼기
-                    imagePlane.position.z += 0.01;
-
-                    // 3. 이미지가 가상의 수직 벽면에 이쁘게 정렬되도록 카메라를 바라보게 회전
+                    // 4. 이미지가 유저(카메라)를 똑바로 바라볼 수 있도록 회전축을 강제 정렬합니다.
                     imagePlane.lookAt(camera.position.x, imagePlane.position.y, camera.position.z);
 
                     scene.add(imagePlane);
 
-                    resultEl.innerHTML = savedDistanceText + "<br><span style='color:#00ff66;'>수학적 가상 평면에 이미지 배치 완료!</span>";
+                    resultEl.innerHTML = savedDistanceText + "<br><span style='color:#00ff66;'>가상 수직 평면에 이미지 배치 완료!</span>";
                     setStep("done");
                 });
             }
@@ -431,14 +429,22 @@
                     if (hitTestResults.length > 0) {
                         const hit = hitTestResults[0];
                         currentHitMatrix = hit.getPose(referenceSpace).transform.matrix;
+                        
+                        // [수정] 3단계(placeImage) 상태일 때는 센서 성공 여부 문구로 UI를 덮어쓰지 않고 안내 고정
                         if (step !== "done" && step !== "placeImage") {
                             resultEl.textContent = "공간 인식 성공! 확정 버튼을 누르세요.";
                         } else if (step === "placeImage") {
-                            resultEl.innerHTML = savedDistanceText + "<br>벽면을 비추며 부착할 위치를 정하세요.";
+                            resultEl.innerHTML = savedDistanceText + "<br><span style='color:#ff00ff;'>원하는 벽면 높이(정면)를 바라보고 버튼을 누르세요!</span>";
                         }
                     } else {
                         currentHitMatrix = null;
-                        if (step !== "done") resultEl.textContent = "평면을 탐색 중입니다...";
+                        
+                        // [수정] 3단계일 때는 센서가 실패하더라도 '평면 탐색 중' 문구를 띄우지 않고 버튼 클릭 유도
+                        if (step === "placeImage") {
+                            resultEl.innerHTML = savedDistanceText + "<br><span style='color:#ff00ff;'>원하는 벽면 높이(정면)를 바라보고 버튼을 누르세요!</span>";
+                        } else if (step !== "done") {
+                            resultEl.textContent = "평면을 탐색 중입니다...";
+                        }
                     }
                 }
             }
