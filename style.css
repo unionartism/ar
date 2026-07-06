@@ -10,17 +10,27 @@ body {
 }
 
 body {
-  touch-action: none;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 button {
   font-family: inherit;
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
-a-scene {
+button:focus-visible {
+  outline: 2px solid #00e7ff;
+  outline-offset: 3px;
+}
+
+a-scene,
+canvas {
   width: 100vw;
   height: 100vh;
+  touch-action: none;
 }
 
 /* Top status HUD */
@@ -73,6 +83,10 @@ a-scene {
   pointer-events: none;
 }
 
+body.poster-placed .notice {
+  display: none;
+}
+
 /* Center placement guide */
 
 .center-guide {
@@ -87,6 +101,12 @@ a-scene {
   border-radius: 999px;
   box-shadow: 0 0 0 9px rgba(0, 231, 255, .08);
   pointer-events: none;
+  opacity: 1;
+  transition: opacity .18s ease, transform .18s ease;
+}
+
+body.poster-placed .center-guide {
+  opacity: .25;
 }
 
 .center-guide::before,
@@ -136,20 +156,28 @@ a-scene {
   position: fixed;
   z-index: 28;
   left: 50%;
-  bottom: calc(152px + env(safe-area-inset-bottom, 0));
+  bottom: calc(232px + env(safe-area-inset-bottom, 0));
   transform: translateX(-50%);
   display: flex;
   gap: 10px;
+  max-width: min(94vw, 430px);
+  overflow-x: auto;
   padding: 8px;
   border-radius: 999px;
   background: rgba(0, 0, 0, .48);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  scrollbar-width: none;
+}
+
+.picker::-webkit-scrollbar {
+  display: none;
 }
 
 .product {
   width: 84px;
   height: 52px;
+  flex: 0 0 auto;
   border: 1px solid rgba(255, 255, 255, .22);
   border-radius: 999px;
   background: rgba(255, 255, 255, .1);
@@ -198,7 +226,7 @@ a-scene {
 .control-panel button {
   border: 1px solid rgba(255, 255, 255, .18);
   border-radius: 999px;
-  min-height: 38px;
+  min-height: 36px;
   padding: 8px 10px;
   background: rgba(255, 255, 255, .1);
   color: white;
@@ -213,7 +241,7 @@ a-scene {
 }
 
 .control-panel .primary-action {
-  min-height: 46px;
+  min-height: 44px;
   border-color: transparent;
   background: #00e7ff;
   color: #001014;
@@ -230,13 +258,18 @@ a-scene {
 
 /* Small screens */
 
-@media (max-height: 760px) {
+@media (max-height: 820px) {
   .notice {
     display: none;
   }
 
   .picker {
-    bottom: calc(142px + env(safe-area-inset-bottom, 0));
+    bottom: calc(220px + env(safe-area-inset-bottom, 0));
+  }
+
+  .control-panel {
+    gap: 7px;
+    padding: 8px;
   }
 
   .control-panel button {
@@ -249,8 +282,36 @@ a-scene {
   }
 }
 
-@media (max-height: 640px) {
+@media (max-height: 720px) {
   .picker {
     display: none;
+  }
+
+  .control-panel {
+    width: min(96vw, 430px);
+  }
+}
+
+@media (max-height: 640px) {
+  .center-guide {
+    width: 44px;
+    height: 44px;
+  }
+
+  .control-panel {
+    gap: 6px;
+    padding: 7px;
+    bottom: calc(10px + env(safe-area-inset-bottom, 0));
+  }
+
+  .control-panel button {
+    min-height: 31px;
+    padding: 6px 8px;
+    font-size: 10px;
+  }
+
+  .control-panel .primary-action {
+    min-height: 38px;
+    font-size: 13px;
   }
 }

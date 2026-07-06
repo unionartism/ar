@@ -2,7 +2,10 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no"
+  />
   <title>Poster AR Preview</title>
 
   <!--
@@ -17,11 +20,17 @@
   <script src="https://cdn.8thwall.com/web/aframe/8frame-1.5.0.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@8thwall/xrextras@1/dist/xrextras.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@8thwall/landing-page@1/dist/landing-page.js" crossorigin="anonymous"></script>
-  <script async src="https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1/dist/xr.js" crossorigin="anonymous" data-preload-chunks="slam"></script>
+  <script
+    async
+    src="https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1/dist/xr.js"
+    crossorigin="anonymous"
+    data-preload-chunks="slam">
+  </script>
 
   <script src="./products.js"></script>
   <script src="./ar-app.js"></script>
 </head>
+
 <body>
   <div id="hud" class="hud">
     <div class="brand">Poster AR Preview</div>
@@ -30,13 +39,14 @@
 
   <div id="notice" class="notice">
     <b>사용 방법</b><br />
-    포스터를 놓고 싶은 벽 앞에 서서 화면 중앙을 원하는 위치에 맞춘 뒤 <b>이미지 배치</b>를 누르세요.<br />
+    포스터를 놓고 싶은 벽 앞에 서서 화면 중앙을 원하는 위치에 맞춘 뒤
+    <b>이미지 배치</b>를 누르세요.<br />
     배치된 이미지는 공간 좌표에 고정되어, 사용자가 움직여도 따라오지 않습니다.
   </div>
 
   <div class="center-guide" aria-hidden="true"></div>
 
-  <button id="recenter" class="top-button">다시 계산</button>
+  <button id="recenter" class="top-button" type="button">다시 계산</button>
 
   <div id="picker" class="picker">
     <button class="product selected" data-product-id="poster-60x90" type="button">
@@ -64,6 +74,18 @@
       <button id="moveUp" type="button">위</button>
       <button id="resetPlacement" type="button">다시 배치</button>
     </div>
+
+    <div class="control-row">
+      <button id="moveCloser" type="button">가까이</button>
+      <button id="moveFarther" type="button">멀리</button>
+      <button id="scaleFit" type="button">맞춤</button>
+    </div>
+
+    <div class="control-row">
+      <button id="rotateLeft" type="button">왼쪽 회전</button>
+      <button id="rotateReset" type="button">회전 초기화</button>
+      <button id="rotateRight" type="button">오른쪽 회전</button>
+    </div>
   </div>
 
   <a-scene
@@ -74,12 +96,19 @@
     landing-pages
     xrextras-loading
     xrextras-runtime-error
-    xrextras-tap-recenter
     poster-ar-app>
 
     <a-assets>
-      <img id="poster-60x90-img" src="./assets/poster-60x90.svg" crossorigin="anonymous" />
-      <img id="frame-50x70-img" src="./assets/frame-50x70.svg" crossorigin="anonymous" />
+      <img
+        id="poster-60x90-img"
+        src="./assets/poster-60x90.svg"
+        crossorigin="anonymous"
+      />
+      <img
+        id="frame-50x70-img"
+        src="./assets/frame-50x70.svg"
+        crossorigin="anonymous"
+      />
     </a-assets>
 
     <a-camera id="camera" position="0 1.6 0"></a-camera>
