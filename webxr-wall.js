@@ -12,6 +12,29 @@ const setLog = (text) => {
   if (el) el.textContent = text;
 };
 
+function setDetectButtonMode(mode) {
+  const button = $("startWebXR");
+  if (!button) return;
+
+  if (mode === "start") {
+    button.disabled = false;
+    button.textContent = "벽 감지 시작";
+    return;
+  }
+
+  if (mode === "detecting") {
+    button.disabled = true;
+    button.textContent = "감지 중...";
+    return;
+  }
+
+  if (mode === "redetect") {
+    button.disabled = false;
+    button.textContent = "벽면 다시 감지";
+    return;
+  }
+}
+
 const getProductById = (id) => {
   const list = window.WALL_AR_PRODUCTS || [];
   return list.find((p) => p.id === id) || list[0];
@@ -197,10 +220,9 @@ async function startWebXR() {
   if (started) return;
 
   started = true;
-  const startButton = $("startWebXR");
   const placeButton = $("placeManual");
 
-  if (startButton) startButton.disabled = true;
+  setDetectButtonMode("detecting");
 
   if (!navigator.xr) {
     goFallback("navigator.xr 없음");
@@ -230,6 +252,7 @@ async function startWebXR() {
       planeDetectionMode = false;
       setStatus("plane-detection 미지원. hit-test 모드로 시작됨");
       setLog("화면 중앙을 벽에 맞춘 뒤 “중앙에 배치”를 누르세요.");
+      setDetectButtonMode("redetect");
     } catch (hitErr) {
       console.warn("hit-test session failed:", hitErr);
       goFallback("WebXR plane-detection / hit-test 세션 모두 실패");
@@ -238,8 +261,11 @@ async function startWebXR() {
   }
 
   xrSession.addEventListener("end", () => {
+    started = false;
+    placed = false;
+    setDetectButtonMode("start");
     setStatus("WebXR 세션이 종료되었습니다.");
-    setLog("다시 시작하려면 페이지를 새로고침하세요.");
+    setLog("다시 시작하려면 “벽 감지 시작”을 누르거나 페이지를 새로고침하세요.");
   });
 
   try {
@@ -317,6 +343,8 @@ function onXRFrame(time, frame) {
         `${product.name} | ${product.widthM}m × ${product.heightM}m | plane-detection 배치`,
       );
 
+      setDetectButtonMode("redetect");
+
       renderer.render(scene, camera);
       return;
     }
@@ -340,6 +368,9 @@ function onXRFrame(time, frame) {
       setLog(
         "자동 감지는 계속 시도 중입니다. 흰 벽이나 민무늬 벽은 감지가 늦을 수 있습니다.",
       );
+
+      // 감지가 늦어질 때 사용자가 다시 누를 수 있게 버튼을 풀어준다.
+      setDetectButtonMode("redetect");
     } else {
       if (!slowDetectionNoticeShown) {
         slowDetectionNoticeShown = true;
@@ -352,6 +383,8 @@ function onXRFrame(time, frame) {
         "자동 정렬이 어렵습니다. 화면 중앙을 벽에 맞춘 뒤 “중앙에 배치”를 누르세요.",
       );
       setLog("감지는 계속 유지됩니다. 벽면이 잡히면 자동 정렬될 수 있습니다.");
+
+      setDetectButtonMode("redetect");
     }
   }
 
@@ -474,11 +507,15 @@ function placePosterInFrontOfCamera() {
   posterRoot.visible = true;
 
   placed = true;
+  frameWithoutPlane = 0;
+  slowDetectionNoticeShown = false;
 
   setStatus("화면 중앙 후보 위치에 포스터를 배치했습니다.");
   setLog(
     `${product.name} | 추정거리 ${DEFAULT_DISTANCE_M.toFixed(1)}m | 수동 중앙 배치`,
   );
+
+  setDetectButtonMode("redetect");
 }
 
 function placeManual() {
@@ -486,15 +523,51 @@ function placeManual() {
     placePosterFromPose(latestHitPose, "hit-test");
     placed = true;
     frameWithoutPlane = 0;
+    slowDetectionNoticeShown = false;
 
     setStatus("hit-test 위치에 포스터를 배치했습니다.");
     setLog(
       "hit-test 결과를 사용했습니다. 벽과 안 맞으면 수동 모드에서 거리/각도를 조정하세요.",
     );
+
+    setDetectButtonMode("redetect");
     return;
   }
 
   placePosterInFrontOfCamera();
+}
+
+function redetectWall() {
+  if (!started || !xrSession) {
+    startWebXR();
+    return;
+  }
+
+  placed = false;
+  frameWithoutPlane = 0;
+  slowDetectionNoticeShown = false;
+  latestHitPose = null;
+
+  if (posterRoot) {
+    posterRoot.visible = false;
+  }
+
+  setDetectButtonMode("detecting");
+
+  if (planeDetectionMode) {
+    setStatus("벽면을 다시 감지하는 중...");
+    setLog("카메라를 새 벽면 쪽으로 향하게 하고 천천히 좌우로 움직이세요.");
+  } else {
+    setStatus("hit-test 모드입니다. 화면 중앙을 벽에 맞춘 뒤 “중앙에 배치”를 누르세요.");
+    setLog("이 기기/브라우저에서는 plane-detection이 없어 수동 배치를 사용합니다.");
+  }
+
+  // 감지가 오래 걸리면 버튼을 다시 풀어서 사용자가 재시도/수동 배치를 선택할 수 있게 한다.
+  window.setTimeout(() => {
+    if (!placed) {
+      setDetectButtonMode("redetect");
+    }
+  }, 1800);
 }
 
 function facePosterTowardCameraIfNeeded() {
@@ -702,7 +775,14 @@ function xrOrientationToQuaternion(orientation) {
 }
 
 function bindUI() {
-  $("startWebXR")?.addEventListener("click", startWebXR);
+  $("startWebXR")?.addEventListener("click", () => {
+    if (!started) {
+      startWebXR();
+      return;
+    }
+
+    redetectWall();
+  });
 
   $("placeManual")?.addEventListener("click", () => {
     if (!started) {
@@ -719,5 +799,6 @@ function bindUI() {
 }
 
 bindUI();
+setDetectButtonMode("start");
 setStatus("Android Chrome WebXR 준비 완료. “벽 감지 시작”을 누르세요.");
 setLog("실제 vertical plane detection을 먼저 시도합니다.");
