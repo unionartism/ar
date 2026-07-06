@@ -3,145 +3,34 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
-  <title>벽면 거리 측정 AR (WebXR + Three.js) 다시</title>
+  <title>벽면 거리 측정 및 이미지 배치 AR</title>
 
   <style>
-    * {
-      box-sizing: border-box;
-    }
-
+    * { box-sizing: border-box; }
     html, body {
-      margin: 0;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: #000;
-      color: #fff;
+      margin: 0; width: 100%; height: 100%; overflow: hidden;
+      background: #000; color: #fff;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
     }
-
-    /* WebXR 세션이 켜지면 Three.js가 생성하는 canvas가 화면을 채웁니다 */
-    canvas {
-      position: fixed;
-      inset: 0;
-      width: 100vw;
-      height: 100vh;
-      z-index: 1;
-    }
-
-    /* HTML 가이드 UI 레이어 */
-    #ui-layer {
-      position: fixed;
-      inset: 0;
-      z-index: 10;
-      pointer-events: none;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-    }
-
-    #top-panel {
-      padding: 20px;
-      padding-top: calc(10px + env(safe-area-inset-top, 0));
-      background: linear-gradient(to bottom, rgba(0,0,0,0.8), rgba(0,0,0,0));
-    }
-
-    #step-title {
-      font-size: 18px;
-      font-weight: 800;
-      color: #00ff66;
-      margin-bottom: 5px;
-    }
-
-    #guide-text {
-      font-size: 14px;
-      line-height: 1.4;
-      opacity: 0.9;
-    }
-
-    #bottom-panel {
-      padding: 15px;
-      padding-bottom: calc(15px + env(safe-area-inset-bottom, 0));
-      background: rgba(0, 0, 0, 0.8);
-      backdrop-filter: blur(10px);
-      pointer-events: auto; /* 버튼 클릭 가능하도록 허용 */
-    }
-
-    .row {
-      display: flex;
-      gap: 10px;
-      margin-top: 10px;
-    }
-
-    button {
-      flex: 1;
-      padding: 14px;
-      border: 0;
-      border-radius: 10px;
-      font-size: 16px;
-      font-weight: 800;
-      color: #fff;
-      background: #007aff;
-      cursor: pointer;
-    }
-
-    button.danger {
-      background: #991b1b;
-      flex: 0.4;
-    }
-
-    button:active {
-      transform: scale(0.98);
-    }
-
-    #result {
-      padding: 12px;
-      border-radius: 8px;
-      background: rgba(255,255,255,0.1);
-      font-size: 15px;
-      line-height: 1.5;
-      text-align: center;
-    }
-
-    /* 화면 중앙 십자선 조준점 (CSS 오버레이) */
-    #crosshair {
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      width: 30px;
-      height: 30px;
-      transform: translate(-50%, -50%);
-      z-index: 5;
-      pointer-events: none;
-      border: 2px solid #00ff66;
-      border-radius: 50%;
-    }
-    #crosshair::before, #crosshair::after {
-      content: '';
-      position: absolute;
-      background: #00ff66;
-    }
+    canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 1; }
+    #ui-layer { position: fixed; inset: 0; z-index: 10; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
+    #top-panel { padding: 20px; padding-top: calc(10px + env(safe-area-inset-top, 0)); background: linear-gradient(to bottom, rgba(0,0,0,0.8), rgba(0,0,0,0)); }
+    #step-title { font-size: 18px; font-weight: 800; color: #00ff66; margin-bottom: 5px; }
+    #guide-text { font-size: 14px; line-height: 1.4; opacity: 0.9; }
+    #bottom-panel { padding: 15px; padding-bottom: calc(15px + env(safe-area-inset-bottom, 0)); background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(10px); pointer-events: auto; }
+    .row { display: flex; gap: 10px; margin-top: 10px; }
+    button { flex: 1; padding: 14px; border: 0; border-radius: 10px; font-size: 16px; font-weight: 800; color: #fff; background: #007aff; cursor: pointer; }
+    button.danger { background: #991b1b; flex: 0.4; }
+    button:active { transform: scale(0.98); }
+    #result { padding: 12px; border-radius: 8px; background: rgba(255,255,255,0.1); font-size: 15px; line-height: 1.5; text-align: center; }
+    #crosshair { position: fixed; top: 50%; left: 50%; width: 30px; height: 30px; transform: translate(-50%, -50%); z-index: 5; pointer-events: none; border: 2px solid #00ff66; border-radius: 50%; }
+    #crosshair::before, #crosshair::after { content: ''; position: absolute; background: #00ff66; }
     #crosshair::before { top: 50%; left: -5px; right: -5px; height: 2px; transform: translateY(-50%); }
     #crosshair::after { left: 50%; top: -5px; bottom: -5px; width: 2px; transform: translateX(-50%); }
-
-    /* Three.js가 생성하는 기본 AR 버튼 스타일 개조 */
-    #ARButton {
-      position: fixed !important;
-      bottom: 50% !important;
-      left: 50% !important;
-      transform: translate(-50%, 50%) !important;
-      z-index: 100 !important;
-      padding: 16px 24px !important;
-      font-size: 16px !important;
-      font-weight: bold !important;
-      background: #007aff !important;
-      border-radius: 12px !important;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
-    }
+    #ARButton { position: fixed !important; bottom: 50% !important; left: 50% !important; transform: translate(-50%, 50%) !important; z-index: 100 !important; padding: 16px 24px !important; font-size: 16px !important; font-weight: bold !important; background: #007aff !important; border-radius: 12px !important; box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important; }
   </style>
 
   <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
-
   <script type="importmap">
     {
       "imports": {
@@ -174,7 +63,6 @@
     import * as THREE from 'three';
     import { ARButton } from 'three/addons/webxr/ARButton.js';
 
-    // UI 요소
     const uiBottom = document.getElementById('bottom-panel');
     const stepTitle = document.getElementById('step-title');
     const guideText = document.getElementById('guide-text');
@@ -183,19 +71,27 @@
     const resetBtn = document.getElementById('reset-btn');
     const crosshair = document.getElementById('crosshair');
 
-    // Three.js 핵심 변수
     let container, camera, scene, renderer;
     let hitTestSource = null;
     let hitTestSourceRequested = false;
 
-    // 측정 상태 변수 (ready -> wallFloor -> toe -> done)
     let step = "ready"; 
     let currentHitMatrix = null;
 
-    // 3D 공간에 고정될 포인트 메쉬 및 가이드 라인
+    // 3D 메쉬 및 애니메이션 대상 변수
     let wallFloorMesh = null;
     let toeMesh = null;
     let lineMesh = null;
+    let imagePlane = null;
+
+    // 애니메이션 제어용 시간값
+    let lineProgress = 0;
+    let isAnimatingLine = false;
+
+    // 타겟 이미지 정보 (예: 가로 40cm, 세로 50cm 액자 -> 미터 환산 시 0.4, 0.5)
+    const TARGET_IMAGE_WIDTH_M = 0.4;
+    const TARGET_IMAGE_HEIGHT_M = 0.5;
+    const IMAGE_URL = 'https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=500'; // 테스트용 명화 이미지
 
     init();
 
@@ -203,23 +99,19 @@
       container = document.createElement('div');
       document.body.appendChild(container);
 
-      // 1. 3D 공간(Scene) 및 카메라 구축
       scene = new THREE.Scene();
       camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
 
-      // 광원 추가 (점들을 입체감 있게 보기 위함)
       const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 3);
       light.position.set(0.5, 1, 0.25);
       scene.add(light);
 
-      // 2. WebGL 렌더러 생성 및 WebXR 활성화
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       renderer.setPixelRatio(window.devicePixelRatio);
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.xr.enabled = true;
       container.appendChild(renderer.domElement);
 
-      // 3. Three.js에서 제공하는 공식 AR 시작 버튼 주입 (Hit-test 필수 요청)
       const arButton = ARButton.createButton(renderer, { 
         requiredFeatures: ['hit-test'],
         optionalFeatures: ['dom-overlay'],
@@ -227,7 +119,6 @@
       });
       document.body.appendChild(arButton);
 
-      // AR 세션이 시작되거나 종료될 때의 UI 전환 이벤트 리스너
       renderer.xr.addEventListener('sessionstart', () => {
         uiBottom.style.display = 'block';
         setStep("wallFloor");
@@ -237,17 +128,13 @@
         resetMeasurement();
       });
 
-      // 4. WebXR 통합 전용 렌더 루프 작동
       renderer.setAnimationLoop(render);
 
       window.addEventListener('resize', onWindowResize);
-
-      // 버튼 이벤트 바인딩
       actionBtn.addEventListener('click', onActionTriggered);
       resetBtn.addEventListener('click', resetMeasurement);
     }
 
-    // 단계 전환 UI 컨트롤러
     function setStep(nextStep) {
       step = nextStep;
       if (step === "wallFloor") {
@@ -266,53 +153,73 @@
         actionBtn.style.background = "#ffe600";
         actionBtn.style.color = "#000";
       } else if (step === "done") {
-        stepTitle.textContent = "측정 완료";
+        stepTitle.textContent = "측정 및 배치 완료";
         stepTitle.style.color = "#00ff66";
         crosshair.style.borderColor = "#fff";
-        guideText.textContent = "공간에 선이 고정되었습니다. 화면을 돌려 확인해 보세요.";
-        actionBtn.textContent = "측정 완료";
+        guideText.textContent = "줄자와 이미지가 벽면에 고정되었습니다. 자유롭게 확인해 보세요.";
+        actionBtn.textContent = "완료됨";
         actionBtn.style.background = "#374151";
         actionBtn.style.color = "#fff";
       }
     }
 
-    // 버튼 클릭 시 수행 로직
     function onActionTriggered() {
       if (!currentHitMatrix) {
-        alert("아직 공간 분석이 되지 않았습니다. 바닥면을 카메라로 조금 더 비춰주세요.");
+        alert("공간 분석 대기 중입니다.");
         return;
       }
 
-      // 3D 공간에 배치할 마커 생성 (지름 4cm의 구체)
       const geometry = new THREE.SphereGeometry(0.02, 32, 32);
-      let material;
-
+      
       if (step === "wallFloor") {
-        material = new THREE.MeshStandardMaterial({ color: 0x00d4ff, roughness: 0.2 });
+        // 1. 벽/바닥 마커 생성 및 팝업 애니메이션 효과 유도 스케일 설정
+        const material = new THREE.MeshStandardMaterial({ color: 0x00d4ff });
         wallFloorMesh = new THREE.Mesh(geometry, material);
-        // 실시간 연산된 Hit 위치 매트릭스로부터 3D 좌표 추출 및 주입
         wallFloorMesh.position.setFromMatrixPosition(new THREE.Matrix4().fromArray(currentHitMatrix));
+        wallFloorMesh.scale.set(0, 0, 0); // 애니메이션용 시작 크기 0
         scene.add(wallFloorMesh);
 
-        resultEl.innerHTML = "벽/바닥 기준점 등록 완료! 다음 단계를 진행하세요.";
+        resultEl.innerHTML = "벽/바닥 기준점 등록 완료!";
         setStep("toe");
 
       } else if (step === "toe") {
-        material = new THREE.MeshStandardMaterial({ color: 0xffe600, roughness: 0.2 });
+        // 2. 발끝 마커 생성
+        const material = new THREE.MeshStandardMaterial({ color: 0xffe600 });
         toeMesh = new THREE.Mesh(geometry, material);
         toeMesh.position.setFromMatrixPosition(new THREE.Matrix4().fromArray(currentHitMatrix));
+        toeMesh.scale.set(0, 0, 0);
         scene.add(toeMesh);
 
-        // 두 마커 사이의 3D 가이드 라인 생성 및 씬 추가
-        const lineGeometry = new THREE.BufferGeometry().setFromPoints([
-          wallFloorMesh.position,
-          toeMesh.position
-        ]);
+        // 3. 줄자 선(Line) 생성 생성 (처음에는 길이가 0인 빈 버퍼로 생성)
+        const lineGeometry = new THREE.BufferGeometry();
         const lineMaterial = new THREE.LineBasicMaterial({ color: 0x00ff66, linewidth: 5 });
         lineMesh = new THREE.Line(lineGeometry, lineMaterial);
         scene.add(lineMesh);
 
-        // 3차원 두 점 사이의 실제 물리적 거리 계산 (단위: 미터)
+        // 줄자 애니메이션 플래그 On
+        lineProgress = 0;
+        isAnimatingLine = true;
+
+        // 4. 벽면에 실제 크기 반영한 가상 이미지 부착 (40cm * 50cm)
+        const textureLoader = new THREE.TextureLoader();
+        textureLoader.load(IMAGE_URL, (texture) => {
+          const imageGeometry = new THREE.PlaneGeometry(TARGET_IMAGE_WIDTH_M, TARGET_IMAGE_HEIGHT_M);
+          const imageMaterial = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
+          imagePlane = new THREE.Mesh(imageGeometry, imageMaterial);
+
+          // 이미지의 중심 위치 설정: 1단계 벽/바닥선 위치 기준
+          // 벽면 정면에 붙이기 위해, 벽 모서리 좌표에서 약간 위쪽(Y축)으로 이미지 절반 크기만큼 올려서 배치
+          imagePlane.position.copy(wallFloorMesh.position);
+          imagePlane.position.y += (TARGET_IMAGE_HEIGHT_M / 2); 
+          imagePlane.position.z += 0.01; // 벽면과 겹쳐서 깜빡이는 현상(Z-fighting) 방지용 미세 조정
+
+          // 카메라가 있는 방향을 바라보도록 회전 정렬
+          imagePlane.lookAt(camera.position.x, imagePlane.position.y, camera.position.z);
+          
+          scene.add(imagePlane);
+        });
+
+        // 최종 거리 연산 및 UI 표기
         const distanceInMeters = wallFloorMesh.position.distanceTo(toeMesh.position);
         const distanceInCm = Math.round(distanceInMeters * 100);
 
@@ -321,16 +228,17 @@
       }
     }
 
-    // 데이터 및 3D 오브젝트 전체 초기화
     function resetMeasurement() {
       if (wallFloorMesh) { scene.remove(wallFloorMesh); wallFloorMesh = null; }
       if (toeMesh) { scene.remove(toeMesh); toeMesh = null; }
       if (lineMesh) { scene.remove(lineMesh); lineMesh = null; }
+      if (imagePlane) { scene.remove(imagePlane); imagePlane = null; }
+
+      isAnimatingLine = false;
+      lineProgress = 0;
 
       resultEl.textContent = "주변 공간(벽과 바닥)을 천천히 비춰주세요.";
-      if (renderer.xr.isPresenting) {
-        setStep("wallFloor");
-      }
+      if (renderer.xr.isPresenting) setStep("wallFloor");
     }
 
     function onWindowResize() {
@@ -339,48 +247,62 @@
       renderer.setSize(window.innerWidth, window.innerHeight);
     }
 
-    // WebXR 통합 렌더 프레임 루프 (매 프레임 자동 실행)
+    // 애니메이션 처리 및 프레임 렌더링 루프
     function render(timestamp, frame) {
+      // 마커 생성 시 팝업 팅김 애니메이션 (Scale 0 -> 1)
+      if (wallFloorMesh && wallFloorMesh.scale.x < 1) {
+        wallFloorMesh.scale.addScalar(0.08);
+      }
+      if (toeMesh && toeMesh.scale.x < 1) {
+        toeMesh.scale.addScalar(0.08);
+      }
+
+      // 1. 줄자선이 스르륵 늘어나는 애니메이션 효과
+      if (isAnimatingLine && wallFloorMesh && toeMesh && lineMesh) {
+        lineProgress += 0.05; // 애니메이션 속도 조절
+        if (lineProgress >= 1) {
+          lineProgress = 1;
+          isAnimatingLine = false;
+        }
+
+        // 출발점(벽)에서 도착점(발끝) 사이의 진행도(Progress)에 따른 현재 끝점 보간 계산
+        const currentLineEnd = new THREE.Vector3().lerpVectors(
+          wallFloorMesh.position,
+          toeMesh.position,
+          lineProgress
+        );
+
+        // 실시간으로 늘어나는 선 좌표 업데이트 적용
+        lineMesh.geometry.setFromPoints([wallFloorMesh.position, currentLineEnd]);
+      }
+
       if (frame) {
         const referenceSpace = renderer.xr.getReferenceSpace();
         const session = renderer.xr.getSession();
 
-        // 1. 최초 진입 시 WebXR 기기 엔진에 Hit Test API 소스 요청
         if (hitTestSourceRequested === false) {
           session.requestReferenceSpace('viewer').then((viewerSpace) => {
             session.requestHitTestSource({ space: viewerSpace }).then((source) => {
               hitTestSource = source;
             });
           });
-          session.addEventListener('end', () => {
-            hitTestSourceRequested = false;
-            hitTestSource = null;
-          });
+          session.addEventListener('end', () => { hitTestSourceRequested = false; hitTestSource = null; });
           hitTestSourceRequested = true;
         }
 
-        // 2. 실시간 조준점이 실제 현실의 바닥/벽 평면과 교차하는 3D 트래킹 좌표 연산
         if (hitTestSource) {
           const hitTestResults = frame.getHitTestResults(hitTestSource);
           if (hitTestResults.length > 0) {
             const hit = hitTestResults[0];
-            // 현실 공간 평면 기준 교차 행렬 데이터 저장
             currentHitMatrix = hit.getPose(referenceSpace).transform.matrix;
-            
-            if (step !== "done") {
-              resultEl.textContent = "공간 인식 성공! 확정 버튼을 누를 수 있습니다.";
-            }
+            if (step !== "done") resultEl.textContent = "공간 인식 성공! 확정 버튼을 누르세요.";
           } else {
-            // 인식이 일시적으로 안 될 때
             currentHitMatrix = null;
-            if (step !== "done") {
-              resultEl.textContent = "평면을 탐색 중입니다... 카메라를 조금씩 움직이세요.";
-            }
+            if (step !== "done") resultEl.textContent = "평면을 탐색 중입니다...";
           }
         }
       }
 
-      // Three.js 3D 그래픽 엔진이 카메라 인지 데이터와 맵핑하여 3D 마커들을 고정 렌더링함
       renderer.render(scene, camera);
     }
   </script>
