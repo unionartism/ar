@@ -23,9 +23,11 @@ a-scene {
   height: 100vh;
 }
 
+/* Top status HUD */
+
 .hud {
   position: fixed;
-  z-index: 20;
+  z-index: 30;
   top: env(safe-area-inset-top, 0);
   left: 0;
   right: 0;
@@ -51,11 +53,90 @@ a-scene {
   text-shadow: 0 1px 2px rgba(0, 0, 0, .7);
 }
 
+/* Notice */
+
+.notice {
+  position: fixed;
+  z-index: 22;
+  left: 12px;
+  right: 12px;
+  top: calc(76px + env(safe-area-inset-top, 0));
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 14px;
+  background: rgba(0, 0, 0, .45);
+  color: rgba(255, 255, 255, .82);
+  font-size: 11px;
+  line-height: 1.45;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  pointer-events: none;
+}
+
+/* Center placement guide */
+
+.center-guide {
+  position: fixed;
+  z-index: 20;
+  left: 50%;
+  top: 50%;
+  width: 52px;
+  height: 52px;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(0, 231, 255, .9);
+  border-radius: 999px;
+  box-shadow: 0 0 0 9px rgba(0, 231, 255, .08);
+  pointer-events: none;
+}
+
+.center-guide::before,
+.center-guide::after {
+  content: "";
+  position: absolute;
+  background: rgba(0, 231, 255, .95);
+}
+
+.center-guide::before {
+  left: 50%;
+  top: 9px;
+  bottom: 9px;
+  width: 1px;
+  transform: translateX(-50%);
+}
+
+.center-guide::after {
+  top: 50%;
+  left: 9px;
+  right: 9px;
+  height: 1px;
+  transform: translateY(-50%);
+}
+
+/* Top action */
+
+.top-button {
+  position: fixed;
+  z-index: 28;
+  right: 12px;
+  top: calc(38px + env(safe-area-inset-top, 0));
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 13px;
+  background: rgba(0, 0, 0, .5);
+  color: white;
+  font-weight: 800;
+  font-size: 12px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Product picker */
+
 .picker {
   position: fixed;
-  z-index: 25;
+  z-index: 28;
   left: 50%;
-  bottom: calc(16px + env(safe-area-inset-bottom, 0));
+  bottom: calc(152px + env(safe-area-inset-bottom, 0));
   transform: translateX(-50%);
   display: flex;
   gap: 10px;
@@ -95,41 +176,81 @@ a-scene {
   box-shadow: 0 0 0 2px rgba(0, 231, 255, .23) inset;
 }
 
-.recenter {
+/* Main controls */
+
+.control-panel {
   position: fixed;
-  z-index: 24;
-  right: 12px;
-  top: calc(72px + env(safe-area-inset-top, 0));
-  border: 0;
+  z-index: 29;
+  left: 50%;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0));
+  transform: translateX(-50%);
+  width: min(94vw, 430px);
+  display: grid;
+  gap: 8px;
+  padding: 9px;
+  border-radius: 20px;
+  background: rgba(0, 0, 0, .52);
+  border: 1px solid rgba(255, 255, 255, .12);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.control-panel button {
+  border: 1px solid rgba(255, 255, 255, .18);
   border-radius: 999px;
-  padding: 10px 13px;
-  background: rgba(0, 0, 0, .5);
+  min-height: 38px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, .1);
   color: white;
-  font-weight: 700;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  font-size: 12px;
+  font-weight: 800;
 }
 
-.notice {
-  position: fixed;
-  z-index: 22;
-  left: 12px;
-  right: 12px;
-  top: calc(104px + env(safe-area-inset-top, 0));
-  padding: 10px 12px;
-  border: 1px solid rgba(255, 255, 255, .14);
-  border-radius: 14px;
-  background: rgba(0, 0, 0, .45);
-  color: rgba(255, 255, 255, .82);
-  font-size: 11px;
-  line-height: 1.45;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  pointer-events: none;
+.control-panel button:active,
+.top-button:active,
+.product:active {
+  transform: translateY(1px);
 }
 
-@media (max-height: 690px) {
+.control-panel .primary-action {
+  min-height: 46px;
+  border-color: transparent;
+  background: #00e7ff;
+  color: #001014;
+  font-size: 15px;
+  font-weight: 900;
+  box-shadow: 0 10px 30px rgba(0, 231, 255, .22);
+}
+
+.control-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+/* Small screens */
+
+@media (max-height: 760px) {
   .notice {
+    display: none;
+  }
+
+  .picker {
+    bottom: calc(142px + env(safe-area-inset-bottom, 0));
+  }
+
+  .control-panel button {
+    min-height: 34px;
+    font-size: 11px;
+  }
+
+  .control-panel .primary-action {
+    min-height: 42px;
+  }
+}
+
+@media (max-height: 640px) {
+  .picker {
     display: none;
   }
 }

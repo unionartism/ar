@@ -3,256 +3,103 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
-  <title>Wall AR Preview</title>
+  <title>Poster AR Preview</title>
+
+  <!--
+    This product includes the XR Engine software developed by Niantic Spatial, Inc.
+    Copyright © 2026 Niantic Spatial, Inc. All rights reserved.
+    License: https://github.com/8thwall/engine/blob/main/LICENSE
+  -->
 
   <link rel="stylesheet" href="./style.css" />
 
-  <style>
-    html,
-    body {
-      margin: 0;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: #05070b;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      color: white;
-    }
+  <!-- 8th Wall / A-Frame stack. No npm build required. -->
+  <script src="https://cdn.8thwall.com/web/aframe/8frame-1.5.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@8thwall/xrextras@1/dist/xrextras.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@8thwall/landing-page@1/dist/landing-page.js" crossorigin="anonymous"></script>
+  <script async src="https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1/dist/xr.js" crossorigin="anonymous" data-preload-chunks="slam"></script>
 
-    .start-screen {
-      min-height: 100vh;
-      min-height: 100dvh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-      box-sizing: border-box;
-      text-align: center;
-      background:
-        radial-gradient(circle at top, rgba(0, 231, 255, .18), transparent 34%),
-        #05070b;
-    }
-
-    .start-card {
-      width: 100%;
-      max-width: 420px;
-      padding: 24px;
-      border-radius: 22px;
-      background: rgba(255, 255, 255, .08);
-      border: 1px solid rgba(255, 255, 255, .14);
-      box-shadow: 0 18px 70px rgba(0, 0, 0, .38);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-    }
-
-    .eyebrow {
-      margin-bottom: 8px;
-      font-size: 12px;
-      font-weight: 800;
-      letter-spacing: .08em;
-      color: #00e7ff;
-    }
-
-    .start-card h1 {
-      margin: 0 0 12px;
-      font-size: 26px;
-      line-height: 1.15;
-    }
-
-    .start-card p {
-      margin: 0 0 18px;
-      color: rgba(255, 255, 255, .78);
-      line-height: 1.55;
-      font-size: 14px;
-    }
-
-    .mode-list {
-      margin: 18px 0 22px;
-      padding: 0;
-      list-style: none;
-      display: grid;
-      gap: 9px;
-      text-align: left;
-    }
-
-    .mode-list li {
-      padding: 10px 12px;
-      border-radius: 14px;
-      background: rgba(255, 255, 255, .07);
-      border: 1px solid rgba(255, 255, 255, .1);
-      font-size: 13px;
-      line-height: 1.35;
-      color: rgba(255, 255, 255, .84);
-    }
-
-    .mode-list b {
-      color: white;
-    }
-
-    .start-button {
-      width: 100%;
-      border: 0;
-      border-radius: 999px;
-      padding: 15px 18px;
-      font-weight: 900;
-      font-size: 15px;
-      color: #001014;
-      background: #00e7ff;
-      cursor: pointer;
-      box-shadow: 0 10px 30px rgba(0, 231, 255, .24);
-    }
-
-    .start-button:active {
-      transform: translateY(1px);
-    }
-
-    .start-button:disabled {
-      opacity: .62;
-      cursor: not-allowed;
-      transform: none;
-    }
-
-    .route-status {
-      margin-top: 14px;
-      min-height: 18px;
-      font-size: 12px;
-      line-height: 1.45;
-      color: rgba(255, 255, 255, .66);
-    }
-
-    .debug {
-      margin-top: 10px;
-      font-size: 11px;
-      line-height: 1.45;
-      color: rgba(255, 255, 255, .42);
-      word-break: break-word;
-    }
-  </style>
+  <script src="./products.js"></script>
+  <script src="./ar-app.js"></script>
 </head>
 <body>
-  <main class="start-screen">
-    <section class="start-card">
-      <div class="eyebrow">WEB AR ROUTER</div>
+  <div id="hud" class="hud">
+    <div class="brand">Poster AR Preview</div>
+    <div id="status" class="status">엔진 로딩 중...</div>
+  </div>
 
-      <h1>Wall AR Preview</h1>
+  <div id="notice" class="notice">
+    <b>사용 방법</b><br />
+    포스터를 놓고 싶은 벽 앞에 서서 화면 중앙을 원하는 위치에 맞춘 뒤 <b>이미지 배치</b>를 누르세요.<br />
+    배치된 이미지는 공간 좌표에 고정되어, 사용자가 움직여도 따라오지 않습니다.
+  </div>
 
-      <p>
-        Android Chrome에서는 실제 벽면 감지를 먼저 시도하고,<br />
-        iOS Safari 또는 감지 실패 시에는 8th Wall 수동 보정 모드로 진행합니다.
-      </p>
+  <div class="center-guide" aria-hidden="true"></div>
 
-      <ul class="mode-list">
-        <li>
-          <b>Android Chrome</b><br />
-          WebXR plane-detection / hit-test 우선 시도
-        </li>
-        <li>
-          <b>iOS Safari</b><br />
-          8th Wall fallback + 사용자 보정형 벽 배치
-        </li>
-        <li>
-          <b>공통 fallback</b><br />
-          실제 plane 감지 실패 시 수동 배치 모드로 전환
-        </li>
-      </ul>
+  <button id="recenter" class="top-button">다시 계산</button>
 
-      <button id="start" class="start-button">AR 시작하기</button>
+  <div id="picker" class="picker">
+    <button class="product selected" data-product-id="poster-60x90" type="button">
+      <img src="./assets/poster-60x90.svg" alt="poster" />
+      <span>60×90cm</span>
+    </button>
 
-      <div id="routeStatus" class="route-status">
-        시작 버튼을 누르면 기기와 브라우저를 확인합니다.
-      </div>
+    <button class="product" data-product-id="frame-50x70" type="button">
+      <img src="./assets/frame-50x70.svg" alt="frame" />
+      <span>50×70cm</span>
+    </button>
+  </div>
 
-      <div id="debug" class="debug"></div>
-    </section>
-  </main>
+  <div class="control-panel">
+    <button id="placePoster" class="primary-action" type="button">이미지 배치</button>
 
-  <script>
-    const $ = (id) => document.getElementById(id)
+    <div class="control-row">
+      <button id="scaleDown" type="button">작게</button>
+      <button id="scaleReset" type="button">기본크기</button>
+      <button id="scaleUp" type="button">크게</button>
+    </div>
 
-    const setStatus = (text) => {
-      const el = $('routeStatus')
-      if (el) el.textContent = text
-    }
+    <div class="control-row">
+      <button id="moveDown" type="button">아래</button>
+      <button id="moveUp" type="button">위</button>
+      <button id="resetPlacement" type="button">다시 배치</button>
+    </div>
+  </div>
 
-    const setDebug = (text) => {
-      const el = $('debug')
-      if (el) el.textContent = text
-    }
+  <a-scene
+    id="scene"
+    renderer="colorManagement: true; physicallyCorrectLights: true; antialias: true; alpha: true"
+    xrconfig="cameraDirection: back; allowedDevices: mobile"
+    xrweb="scale: absolute"
+    landing-pages
+    xrextras-loading
+    xrextras-runtime-error
+    xrextras-tap-recenter
+    poster-ar-app>
 
-    const ua = navigator.userAgent || ''
+    <a-assets>
+      <img id="poster-60x90-img" src="./assets/poster-60x90.svg" crossorigin="anonymous" />
+      <img id="frame-50x70-img" src="./assets/frame-50x70.svg" crossorigin="anonymous" />
+    </a-assets>
 
-    const isAndroid = /Android/i.test(ua)
+    <a-camera id="camera" position="0 1.6 0"></a-camera>
 
-    const isIOS =
-      /iPhone|iPad|iPod/i.test(ua) ||
-      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+    <a-light type="ambient" intensity="0.9"></a-light>
+    <a-light type="directional" position="0 4 2" intensity="0.6"></a-light>
 
-    const isSamsungBrowser = /SamsungBrowser/i.test(ua)
-    const isEdge = /Edg/i.test(ua)
-    const isOpera = /OPR|Opera/i.test(ua)
-    const isFirefox = /Firefox|FxiOS/i.test(ua)
+    <!-- AR poster. Placed once into world space by ar-app.js. -->
+    <a-plane
+      id="posterPlane"
+      visible="false"
+      position="0 1.45 -1.6"
+      width="0.6"
+      height="0.9"
+      material="shader: flat; side: double; transparent: true; src: #poster-60x90-img"
+      class="ar-poster">
+    </a-plane>
 
-    const isChrome =
-      /Chrome|CriOS/i.test(ua) &&
-      !isSamsungBrowser &&
-      !isEdge &&
-      !isOpera &&
-      !isFirefox
-
-    const fallbackUrl = './8thwall-fallback.html'
-    const webxrUrl = './webxr-wall.html'
-
-    setDebug(
-      `Android: ${isAndroid} | iOS: ${isIOS} | Chrome: ${isChrome} | XR: ${Boolean(navigator.xr)}`
-    )
-
-    async function canTryWebXR() {
-      if (!isAndroid) return false
-      if (!isChrome) return false
-      if (!navigator.xr) return false
-
-      try {
-        return await navigator.xr.isSessionSupported('immersive-ar')
-      } catch (err) {
-        console.warn('navigator.xr.isSessionSupported failed:', err)
-        return false
-      }
-    }
-
-    function goFallback(reason) {
-      console.warn('Go fallback:', reason)
-      setStatus('8th Wall fallback 모드로 이동합니다.')
-      window.location.href = fallbackUrl
-    }
-
-    $('start').addEventListener('click', async () => {
-      const button = $('start')
-      button.disabled = true
-
-      setStatus('AR 실행 환경 확인 중...')
-
-      try {
-        const webxrSupported = await canTryWebXR()
-
-        if (webxrSupported) {
-          setStatus('Android Chrome WebXR 모드로 이동합니다.')
-          window.location.href = webxrUrl
-          return
-        }
-
-        if (isIOS) {
-          goFallback('iOS device')
-          return
-        }
-
-        goFallback('WebXR unsupported or non-Android Chrome')
-      } catch (err) {
-        console.error('Routing failed:', err)
-        goFallback('Router error')
-      } finally {
-        button.disabled = false
-      }
-    })
-  </script>
+    <!-- Border for visual scale. -->
+    <a-entity id="posterBorder" visible="false"></a-entity>
+  </a-scene>
 </body>
 </html>
