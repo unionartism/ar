@@ -4,34 +4,243 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>기울기 기반 거리 측정기</title>
+
     <style>
-        body { margin: 0; overflow: hidden; font-family: sans-serif; background: #000; color: #fff; }
-        #camera-preview { width: 100vw; height: 100vh; object-fit: cover; position: absolute; z-index: 1; }
-        #ui-layer { position: absolute; z-index: 2; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: space-between; pointer-events: none; }
-        #crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 20px; height: 20px; border: 2px solid #00ff00; border-radius: 50%; pointer-events: none; }
-        #crosshair::after { content: ''; position: absolute; top: 9px; left: -5px; width: 30px; height: 2px; background: #00ff00; }
-        #crosshair::before { content: ''; position: absolute; top: -5px; left: 9px; width: 2px; height: 30px; background: #00ff00; }
-        .hud { background: rgba(0,0,0,0.7); padding: 15px; margin: 10px; border-radius: 8px; pointer-events: auto; }
-        button { background: #007aff; color: white; border: none; padding: 12px 20px; font-size: 16px; border-radius: 5px; cursor: pointer; font-weight: bold; }
-        button:active { background: #0051a8; }
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: sans-serif;
+            background: #000;
+            color: #fff;
+        }
+
+        #camera-preview {
+            width: 100vw;
+            height: 100vh;
+            object-fit: cover;
+            position: absolute;
+            z-index: 1;
+        }
+
+        #ui-layer {
+            position: absolute;
+            z-index: 2;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            pointer-events: none;
+        }
+
+        .hud {
+            background: rgba(0,0,0,0.72);
+            padding: 15px;
+            margin: 10px;
+            border-radius: 8px;
+            pointer-events: auto;
+        }
+
+        button {
+            background: #007aff;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            width: 100%;
+        }
+
+        button:active {
+            background: #0051a8;
+        }
+
+        input {
+            font-size: 16px;
+            border-radius: 4px;
+            border: none;
+            padding: 4px;
+        }
+
+        /* 중앙 조준 가이드 */
+        #aim-guide {
+            position: absolute;
+            z-index: 3;
+            top: 50%;
+            left: 50%;
+            width: 100vw;
+            height: 100vh;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+
+        .aim-line-horizontal {
+            position: absolute;
+            top: 50%;
+            left: 8%;
+            width: 84%;
+            height: 2px;
+            background: rgba(0, 255, 0, 0.9);
+            transform: translateY(-50%);
+            box-shadow: 0 0 8px rgba(0, 255, 0, 0.8);
+        }
+
+        .aim-line-vertical {
+            position: absolute;
+            left: 50%;
+            top: 38%;
+            width: 2px;
+            height: 24%;
+            background: rgba(0, 255, 0, 0.9);
+            transform: translateX(-50%);
+            box-shadow: 0 0 8px rgba(0, 255, 0, 0.8);
+        }
+
+        .aim-circle {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 42px;
+            height: 42px;
+            border: 3px solid #00ff00;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow:
+                0 0 0 2px rgba(0,0,0,0.65),
+                0 0 14px rgba(0,255,0,0.9);
+        }
+
+        .aim-dot {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 7px;
+            height: 7px;
+            background: #00ff00;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 8px rgba(0,255,0,1);
+        }
+
+        #aim-label {
+            position: absolute;
+            top: calc(50% + 34px);
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: rgba(0, 0, 0, 0.72);
+            color: #00ff00;
+            font-size: 14px;
+            font-weight: bold;
+            white-space: nowrap;
+            text-align: center;
+        }
+
+        #aim-guide.feet .aim-line-horizontal,
+        #aim-guide.feet .aim-line-vertical {
+            background: rgba(255, 230, 0, 0.95);
+            box-shadow: 0 0 8px rgba(255, 230, 0, 0.85);
+        }
+
+        #aim-guide.feet .aim-circle {
+            border-color: #ffe600;
+            box-shadow:
+                0 0 0 2px rgba(0,0,0,0.65),
+                0 0 14px rgba(255,230,0,0.95);
+        }
+
+        #aim-guide.feet .aim-dot {
+            background: #ffe600;
+            box-shadow: 0 0 8px rgba(255,230,0,1);
+        }
+
+        #aim-guide.feet #aim-label {
+            color: #ffe600;
+        }
+
+        #aim-guide.done .aim-line-horizontal,
+        #aim-guide.done .aim-line-vertical {
+            background: rgba(0, 200, 255, 0.95);
+            box-shadow: 0 0 8px rgba(0, 200, 255, 0.85);
+        }
+
+        #aim-guide.done .aim-circle {
+            border-color: #00c8ff;
+            box-shadow:
+                0 0 0 2px rgba(0,0,0,0.65),
+                0 0 14px rgba(0,200,255,0.95);
+        }
+
+        #aim-guide.done .aim-dot {
+            background: #00c8ff;
+            box-shadow: 0 0 8px rgba(0,200,255,1);
+        }
+
+        #aim-guide.done #aim-label {
+            color: #00c8ff;
+        }
+
+        #step-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #00ff00;
+        }
+
+        #guide-text {
+            font-size: 14px;
+            line-height: 1.4;
+            color: rgba(255,255,255,0.9);
+            margin-bottom: 8px;
+        }
+
+        #calc-result {
+            color: #00ff00;
+            font-weight: bold;
+            margin-top: 5px;
+            line-height: 1.5;
+        }
+
+        #current-angle {
+            font-size: 14px;
+            color: rgba(255,255,255,0.85);
+        }
     </style>
 </head>
+
 <body>
 
     <!-- 카메라 백그라운드 영상 -->
     <video id="camera-preview" autoplay playsinline muted></video>
 
-    <!-- 조준점 (Crosshair) -->
-    <div id="crosshair"></div>
+    <!-- 중앙 기준점 / 조준 가이드 -->
+    <div id="aim-guide">
+        <div class="aim-line-horizontal"></div>
+        <div class="aim-line-vertical"></div>
+        <div class="aim-circle"></div>
+        <div class="aim-dot"></div>
+        <div id="aim-label">센서 권한을 요청하세요</div>
+    </div>
 
     <!-- UI 레이어 -->
     <div id="ui-layer">
         <div class="hud" id="status-panel">
-            <h3>기울기 측정 가이드</h3>
+            <div id="step-title">준비</div>
+
+            <div id="guide-text">
+                센서 권한을 요청한 뒤, 중앙 기준점을 조준 위치에 맞춰주세요.
+            </div>
+
             <label>스마트폰 높이(cm): </label>
-            <input type="number" id="cam-height" value="150" style="width: 60px; text-align: center;"><br><br>
+            <input type="number" id="cam-height" value="150" style="width: 60px; text-align: center;">
+
+            <br><br>
+
             <div id="current-angle">현재 Pitch 각도: 0°</div>
-            <div id="calc-result" style="color: #00ff00; font-weight: bold; margin-top: 5px;">결과: -</div>
+            <div id="calc-result">결과: -</div>
         </div>
 
         <div class="hud" style="text-align: center; margin-bottom: 30px;">
@@ -46,23 +255,58 @@
         const txtResult = document.getElementById('calc-result');
         const inputHeight = document.getElementById('cam-height');
 
-        let currentPitch = 0; // 스마트폰의 상하 기울기 (Degree)
-        let step = 0;         // 0: 권한요청, 1: 벽면조준, 2: 발끝조준, 3: 완료
-        let d_wall = 0;       // 벽까지의 수평 거리
-        let d_feet = 0;       // 발끝까지의 수평 거리
+        const aimGuide = document.getElementById('aim-guide');
+        const aimLabel = document.getElementById('aim-label');
+        const stepTitle = document.getElementById('step-title');
+        const guideText = document.getElementById('guide-text');
+
+        let currentPitch = 0;
+        let step = 0;
+
+        let d_wall = 0;
+        let d_feet = 0;
+
+        function setGuide(mode, label, title, text) {
+            aimGuide.classList.remove('feet', 'done');
+
+            if (mode === 'feet') {
+                aimGuide.classList.add('feet');
+            }
+
+            if (mode === 'done') {
+                aimGuide.classList.add('done');
+            }
+
+            aimLabel.innerText = label;
+            stepTitle.innerText = title;
+            guideText.innerText = text;
+        }
 
         // 1. 카메라 스트림 켜기
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
-            .then(stream => { video.srcObject = stream; })
-            .catch(err => alert('카메라 접근 권한이 필요합니다: ' + err));
+        navigator.mediaDevices.getUserMedia({
+            video: {
+                facingMode: 'environment'
+            },
+            audio: false
+        })
+        .then(stream => {
+            video.srcObject = stream;
+        })
+        .catch(err => {
+            alert('카메라 접근 권한이 필요합니다: ' + err);
+        });
 
         // 2. iOS 센서 권한 대응 및 스텝별 트리거
         btnAction.addEventListener('click', async () => {
             if (step === 0) {
                 // iOS 13+ 권한 요청 처리
-                if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                if (
+                    typeof DeviceOrientationEvent !== 'undefined' &&
+                    typeof DeviceOrientationEvent.requestPermission === 'function'
+                ) {
                     try {
                         const permissionState = await DeviceOrientationEvent.requestPermission();
+
                         if (permissionState === 'granted') {
                             window.addEventListener('deviceorientation', handleOrientation);
                             initStep1();
@@ -77,17 +321,28 @@
                     window.addEventListener('deviceorientation', handleOrientation);
                     initStep1();
                 }
+
             } else if (step === 1) {
                 // [점 1] 벽면 하단 측정
                 const h = parseFloat(inputHeight.value);
-                // 삼각함수 공식: d = h * tan(θ)
-                // 기울기 각도를 라디안으로 변환 (정면이 0도 기준이 되도록 보정 필요)
+
+                // 기존 코드의 계산 방식 유지
                 const thetaRad = (90 - currentPitch) * (Math.PI / 180);
                 d_wall = h * Math.tan(thetaRad);
 
                 step = 2;
+
                 btnAction.innerText = "2단계: 발끝 조준 후 터치";
+
+                setGuide(
+                    'feet',
+                    '발끝을 중앙 기준점에 맞추세요',
+                    '2단계: 발끝 조준',
+                    '발끝 위치가 중앙의 노란 기준점에 오도록 휴대폰을 천천히 움직인 뒤 버튼을 누르세요.'
+                );
+
                 txtResult.innerText = `벽면 거리 계산됨: ${Math.round(d_wall)} cm`;
+
             } else if (step === 2) {
                 // [점 2] 사용자 발끝 측정
                 const h = parseFloat(inputHeight.value);
@@ -96,25 +351,44 @@
 
                 const finalDistance = d_wall - d_feet;
 
-                step = 1; // 다시 측정할 수 있도록 1단계로 순환
-                btnAction.innerText = "1단계: 벽면 바닥 조준 후 터치";
+                step = 1;
+
+                btnAction.innerText = "다시 측정: 벽면 바닥 조준 후 터치";
+
+                setGuide(
+                    'done',
+                    '측정 완료',
+                    '측정 완료',
+                    '결과를 확인하세요. 다시 측정하려면 벽면과 바닥이 만나는 부분을 중앙 기준점에 맞추고 버튼을 누르세요.'
+                );
+
                 txtResult.innerHTML = `
                     벽면까지: ${Math.round(d_wall)}cm<br>
                     발끝까지: ${Math.round(d_feet)}cm<br>
-                    <span style="font-size:1.2em; color:#ffff00;">★ 실제 측정 거리: ${Math.round(Math.abs(finalDistance))} cm</span>
+                    <span style="font-size:1.2em; color:#ffff00;">
+                        ★ 실제 측정 거리: ${Math.round(Math.abs(finalDistance))} cm
+                    </span>
                 `;
             }
         });
 
         function initStep1() {
             step = 1;
+
             btnAction.innerText = "1단계: 벽면 바닥 조준 후 터치";
+
+            setGuide(
+                'wall',
+                '벽/바닥선을 중앙 기준점에 맞추세요',
+                '1단계: 벽면 바닥 조준',
+                '벽면과 바닥이 만나는 부분이 중앙의 초록 기준점에 오도록 휴대폰을 천천히 움직인 뒤 버튼을 누르세요.'
+            );
+
+            txtResult.innerText = '결과: -';
         }
 
-        // 3. 자이로스코프 센서 데이터 처리 (Pitch 추출)
+        // 3. 자이로스코프 센서 데이터 처리
         function handleOrientation(event) {
-            // event.beta: 스마트폰을 세웠을 때 앞뒤로 기울어지는 각도 (-180 ~ 180)
-            // 기종 및 파지법에 따라 정면을 바라볼 때 보통 70~90도 사이를 가집니다.
             if (event.beta !== null) {
                 currentPitch = event.beta;
                 txtAngle.innerText = `현재 Pitch 각도: ${Math.round(currentPitch)}°`;
