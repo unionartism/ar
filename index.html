@@ -3,380 +3,267 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Wall Image AR MVP</title>
+  <title>Wall Distance MVP</title>
   <style>
-    html, body {
-      margin: 0;
-      height: 100%;
-      overflow: hidden;
-      background: #000;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      color: #fff;
-    }
-
-    #app {
-      position: fixed;
-      inset: 0;
-      overflow: hidden;
-      background: #000;
-    }
-
-    video {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      background: #111;
-    }
-
-    #placedImage {
-      position: absolute;
-      display: none;
-      max-width: none;
-      transform-origin: center center;
-      pointer-events: none;
-      filter: drop-shadow(0 2px 8px rgba(0,0,0,.35));
-    }
-
-    .crosshair {
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      width: 44px;
-      height: 44px;
-      transform: translate(-50%, -50%);
-      pointer-events: none;
-      opacity: .9;
-    }
-    .crosshair::before,
-    .crosshair::after {
-      content: "";
-      position: absolute;
-      background: #fff;
-      box-shadow: 0 0 3px #000;
-    }
-    .crosshair::before {
-      left: 50%; top: 0;
-      width: 2px; height: 44px;
-      transform: translateX(-50%);
-    }
-    .crosshair::after {
-      left: 0; top: 50%;
-      width: 44px; height: 2px;
-      transform: translateY(-50%);
-    }
-
-    #level {
-      position: absolute;
-      left: 50%;
-      top: 18%;
-      width: 120px;
-      height: 2px;
-      margin-left: -60px;
-      background: rgba(255,255,255,.8);
-      box-shadow: 0 0 3px #000;
-      transform-origin: center;
-      pointer-events: none;
-    }
-
-    .panel {
-      position: absolute;
-      left: 10px;
-      right: 10px;
-      bottom: calc(10px + env(safe-area-inset-bottom));
-      padding: 10px;
-      border-radius: 12px;
-      background: rgba(0,0,0,.62);
-      backdrop-filter: blur(8px);
-      font-size: 13px;
-    }
-
-    .row {
-      display: flex;
-      gap: 6px;
-      align-items: center;
-      margin-top: 6px;
-    }
-
-    .row:first-child { margin-top: 0; }
-
-    button, label.fileBtn {
-      border: 0;
-      border-radius: 8px;
-      padding: 9px 10px;
-      color: #111;
-      background: #fff;
-      font-weight: 700;
-      font-size: 13px;
-      white-space: nowrap;
-    }
-
-    button:active, label.fileBtn:active { transform: scale(.98); }
-
-    input {
-      min-width: 0;
-      border: 0;
-      border-radius: 8px;
-      padding: 8px;
-      font-size: 13px;
-    }
-
-    input[type="number"] { width: 76px; }
-    input[type="range"] { flex: 1; padding: 0; }
-    input[type="file"] { display: none; }
-
-    .grow { flex: 1; }
-    .muted { color: rgba(255,255,255,.72); }
-    #status { line-height: 1.35; }
+    html, body { margin:0; height:100%; overflow:hidden; background:#000; color:#fff; font-family:system-ui,-apple-system,sans-serif; }
+    #app { position:fixed; inset:0; background:#000; }
+    video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; background:#111; }
+    #img { position:absolute; display:none; max-width:none; transform-origin:center; pointer-events:none; box-shadow:0 2px 12px rgba(0,0,0,.35); }
+    .cross { position:absolute; left:50%; top:50%; width:54px; height:54px; transform:translate(-50%,-50%); pointer-events:none; }
+    .cross:before, .cross:after { content:""; position:absolute; background:#fff; box-shadow:0 0 4px #000; }
+    .cross:before { left:26px; top:0; width:2px; height:54px; }
+    .cross:after { left:0; top:26px; width:54px; height:2px; }
+    .panel { position:absolute; left:8px; right:8px; bottom:calc(8px + env(safe-area-inset-bottom)); padding:10px; border-radius:12px; background:rgba(0,0,0,.72); font-size:13px; }
+    .row { display:flex; gap:6px; align-items:center; margin-top:7px; flex-wrap:wrap; }
+    .row:first-child { margin-top:0; }
+    button, label { border:0; border-radius:8px; padding:8px 9px; background:#fff; color:#111; font-weight:700; font-size:13px; }
+    input { border:0; border-radius:8px; padding:7px; font-size:13px; }
+    input[type="number"] { width:72px; }
+    input[type="range"] { flex:1; min-width:120px; padding:0; }
+    input[type="file"] { display:none; }
+    .muted { color:rgba(255,255,255,.75); }
+    .ok { color:#a7ffb5; }
+    .warn { color:#ffd48a; }
+    #status { line-height:1.35; }
   </style>
 </head>
 <body>
-  <div id="app">
-    <video id="video" autoplay muted playsinline></video>
-    <img id="placedImage" alt="배치 이미지" />
-    <div id="level"></div>
-    <div class="crosshair"></div>
+<div id="app">
+  <video id="video" autoplay muted playsinline></video>
+  <img id="img" alt="배치 이미지" />
+  <div class="cross"></div>
 
-    <div class="panel">
-      <div id="status" class="muted">카메라 시작 → 이미지 선택 → 거리 측정/입력 → 이미지 배치</div>
+  <div class="panel">
+    <div id="status" class="muted">1) 카메라 시작 → 2) 수평 기준 저장 → 3) 벽/바닥선 측정</div>
 
-      <div class="row">
-        <button id="startBtn">카메라 시작</button>
-        <label class="fileBtn" for="imageInput">이미지 선택</label>
-        <input id="imageInput" type="file" accept="image/*" />
-        <button id="placeBtn">이미지 배치</button>
-      </div>
-
-      <div class="row">
-        <span>카메라높이 cm</span>
-        <input id="cameraHeightInput" type="number" value="155" min="80" max="220" />
-        <button id="measureBtn">거리 측정</button>
-        <span>거리 m</span>
-        <input id="distanceInput" type="number" value="2.0" min="0.3" max="20" step="0.01" />
-      </div>
-
-      <div class="row">
-        <span>실제폭 cm</span>
-        <input id="realWidthInput" type="number" value="100" min="5" max="500" />
-        <span>크기</span>
-        <input id="scaleInput" type="range" min="0.3" max="2.5" step="0.01" value="1" />
-      </div>
-
-      <div class="row muted">
-        <span id="sensorText" class="grow">센서 대기 중</span>
-      </div>
+    <div class="row">
+      <button id="startBtn">카메라 시작</button>
+      <button id="zeroBtn">수평 기준 저장</button>
+      <button id="measureBtn">벽/바닥선 측정</button>
     </div>
+
+    <div class="row">
+      <span>카메라높이 cm</span>
+      <input id="cameraHeight" type="number" value="155" min="80" max="220" />
+      <span>거리 m</span>
+      <input id="distance" type="number" value="2.00" min="0.2" max="20" step="0.01" />
+    </div>
+
+    <div class="row">
+      <label for="file">이미지 선택</label>
+      <input id="file" type="file" accept="image/*" />
+      <button id="placeBtn">이미지 배치</button>
+      <span>실제폭 cm</span>
+      <input id="realWidth" type="number" value="100" min="5" max="500" />
+    </div>
+
+    <div class="row">
+      <span>크기</span>
+      <input id="scale" type="range" min="0.3" max="2.5" step="0.01" value="1" />
+    </div>
+
+    <div id="debug" class="muted">센서 대기 중</div>
   </div>
+</div>
 
-  <script>
-    const video = document.getElementById('video');
-    const placedImage = document.getElementById('placedImage');
-    const level = document.getElementById('level');
-    const statusEl = document.getElementById('status');
-    const sensorText = document.getElementById('sensorText');
+<script>
+  const video = document.getElementById('video');
+  const img = document.getElementById('img');
+  const statusEl = document.getElementById('status');
+  const debugEl = document.getElementById('debug');
 
-    const startBtn = document.getElementById('startBtn');
-    const imageInput = document.getElementById('imageInput');
-    const placeBtn = document.getElementById('placeBtn');
-    const measureBtn = document.getElementById('measureBtn');
-    const cameraHeightInput = document.getElementById('cameraHeightInput');
-    const distanceInput = document.getElementById('distanceInput');
-    const realWidthInput = document.getElementById('realWidthInput');
-    const scaleInput = document.getElementById('scaleInput');
+  const startBtn = document.getElementById('startBtn');
+  const zeroBtn = document.getElementById('zeroBtn');
+  const measureBtn = document.getElementById('measureBtn');
+  const placeBtn = document.getElementById('placeBtn');
+  const file = document.getElementById('file');
+  const cameraHeight = document.getElementById('cameraHeight');
+  const distance = document.getElementById('distance');
+  const realWidth = document.getElementById('realWidth');
+  const scale = document.getElementById('scale');
 
-    const H_FOV_DEG = 65;
-    const V_FOV_DEG = 50;
+  const H_FOV_DEG = 65; // 모바일 후면카메라 대략값. MVP라서 보정 전제.
 
-    let currentOrientation = { alpha: null, beta: null, gamma: null };
-    let placement = null;
-    let imageAspect = 1;
-    let hasImage = false;
+  let ori = { alpha:null, beta:null, gamma:null };
+  let zeroBeta = null;
+  let zeroAlpha = null;
+  let imageAspect = 1;
+  let hasImage = false;
+  let placement = null;
 
-    function setStatus(text) {
-      statusEl.textContent = text;
-    }
+  function setStatus(text, cls='muted') {
+    statusEl.className = cls;
+    statusEl.textContent = text;
+  }
 
-    function degToRad(deg) {
-      return deg * Math.PI / 180;
-    }
+  function rad(deg) { return deg * Math.PI / 180; }
+  function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+  function angleDiff(a, b) {
+    if (a == null || b == null) return 0;
+    let d = a - b;
+    while (d > 180) d -= 360;
+    while (d < -180) d += 360;
+    return d;
+  }
 
-    function clamp(value, min, max) {
-      return Math.min(max, Math.max(min, value));
-    }
-
-    function angleDiffDeg(current, base) {
-      if (current == null || base == null) return 0;
-      let diff = current - base;
-      while (diff > 180) diff -= 360;
-      while (diff < -180) diff += 360;
-      return diff;
-    }
-
-    function getPitchDownDeg() {
-      const beta = currentOrientation.beta;
-      if (beta == null) return null;
-
-      // portrait 기준 근사값입니다.
-      // 폰을 세워 정면을 보면 beta가 대략 90도 근처이고,
-      // 아래로 기울이면 90 - beta 값이 커집니다.
-      const pitchDown = 90 - beta;
-      return clamp(pitchDown, 1, 80);
-    }
-
-    async function startCameraAndSensors() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          },
-          audio: false
-        });
-        video.srcObject = stream;
-        await video.play();
-
-        await requestOrientationPermission();
-        setStatus('벽과 바닥이 만나는 선을 중앙 십자에 맞춘 뒤 거리 측정을 누르세요.');
-      } catch (err) {
-        console.error(err);
-        setStatus('카메라/센서 권한을 확인하세요. GitHub Pages HTTPS에서 테스트하세요.');
-      }
-    }
-
-    async function requestOrientationPermission() {
-      if (
-        typeof DeviceOrientationEvent !== 'undefined' &&
-        typeof DeviceOrientationEvent.requestPermission === 'function'
-      ) {
-        const result = await DeviceOrientationEvent.requestPermission();
-        if (result !== 'granted') {
-          setStatus('센서 권한이 거부되었습니다. 거리값을 직접 입력해서 사용할 수 있습니다.');
-          return;
-        }
-      }
-
-      window.addEventListener('deviceorientation', (event) => {
-        currentOrientation = {
-          alpha: event.alpha,
-          beta: event.beta,
-          gamma: event.gamma
-        };
-
-        const alpha = event.alpha == null ? '-' : event.alpha.toFixed(0);
-        const beta = event.beta == null ? '-' : event.beta.toFixed(0);
-        const gamma = event.gamma == null ? '-' : event.gamma.toFixed(0);
-        const pitch = getPitchDownDeg();
-        const pitchText = pitch == null ? '-' : pitch.toFixed(1);
-
-        sensorText.textContent = `방향 alpha ${alpha} / beta ${beta} / gamma ${gamma} / 아래기울기 ${pitchText}°`;
-
-        if (event.gamma != null) {
-          level.style.transform = `rotate(${event.gamma}deg)`;
-        }
-      }, true);
-    }
-
-    function measureDistance() {
-      const pitchDownDeg = getPitchDownDeg();
-      const cameraHeightM = Number(cameraHeightInput.value) / 100;
-
-      if (!pitchDownDeg || pitchDownDeg <= 1) {
-        setStatus('센서값이 부족합니다. 거리 m 값을 직접 입력해도 됩니다.');
+  async function start() {
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setStatus('이 브라우저는 카메라 API를 지원하지 않습니다.', 'warn');
         return;
       }
 
-      const distanceM = cameraHeightM / Math.tan(degToRad(pitchDownDeg));
-      const corrected = clamp(distanceM, 0.3, 20);
-      distanceInput.value = corrected.toFixed(2);
-      setStatus(`거리 약 ${corrected.toFixed(2)}m. 이제 벽의 눈높이 위치를 중앙에 맞추고 이미지 배치를 누르세요.`);
-    }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal:'environment' } },
+        audio: false
+      });
+      video.srcObject = stream;
+      await video.play();
 
-    function metersToPixels(realWidthM, distanceM) {
-      const viewportWidthPx = window.innerWidth;
-      const visibleWidthM = 2 * distanceM * Math.tan(degToRad(H_FOV_DEG) / 2);
-      return viewportWidthPx * (realWidthM / visibleWidthM);
+      await requestSensor();
+      setStatus('카메라 준비 완료. 먼저 카메라를 벽 눈높이에 정면으로 비추고 “수평 기준 저장”을 누르세요.', 'ok');
+    } catch (e) {
+      console.error(e);
+      setStatus('카메라 권한 또는 HTTPS 환경을 확인하세요. iPhone은 Safari에서 테스트하세요.', 'warn');
     }
+  }
 
-    function placeImage() {
-      if (!hasImage) {
-        setStatus('먼저 이미지를 선택하세요.');
+  async function requestSensor() {
+    if (typeof DeviceOrientationEvent !== 'undefined' &&
+        typeof DeviceOrientationEvent.requestPermission === 'function') {
+      const res = await DeviceOrientationEvent.requestPermission();
+      if (res !== 'granted') {
+        setStatus('센서 권한이 거부되었습니다. 거리값은 직접 입력해야 합니다.', 'warn');
         return;
       }
-
-      placement = {
-        alpha: currentOrientation.alpha,
-        beta: currentOrientation.beta,
-        gamma: currentOrientation.gamma,
-        centerX: window.innerWidth / 2,
-        centerY: window.innerHeight / 2
-      };
-
-      placedImage.style.display = 'block';
-      updatePlacedImage();
-      setStatus('이미지를 배치했습니다. 실제폭/크기/거리 값을 조절해 보세요.');
     }
 
-    function updatePlacedImage() {
-      if (!placement || !hasImage) return;
+    window.addEventListener('deviceorientation', (e) => {
+      ori = { alpha:e.alpha, beta:e.beta, gamma:e.gamma };
+      const beta = e.beta == null ? '-' : e.beta.toFixed(1);
+      const gamma = e.gamma == null ? '-' : e.gamma.toFixed(1);
+      const zero = zeroBeta == null ? '-' : zeroBeta.toFixed(1);
+      const delta = zeroBeta == null || e.beta == null ? '-' : Math.abs(angleDiff(e.beta, zeroBeta)).toFixed(1);
+      debugEl.textContent = `beta ${beta}° / gamma ${gamma}° / 기준 ${zero}° / 차이 ${delta}°`;
+    }, true);
+  }
 
-      const distanceM = Math.max(0.3, Number(distanceInput.value) || 2);
-      const realWidthM = Math.max(0.05, Number(realWidthInput.value) / 100 || 1);
-      const scale = Number(scaleInput.value) || 1;
+  function saveHorizontalZero() {
+    if (ori.beta == null) {
+      setStatus('센서값이 아직 없습니다. 카메라 시작 후 1~2초 뒤 다시 눌러보세요.', 'warn');
+      return;
+    }
+    zeroBeta = ori.beta;
+    zeroAlpha = ori.alpha;
+    setStatus('수평 기준 저장 완료. 이제 벽과 바닥이 만나는 선을 중앙 십자에 맞추고 “벽/바닥선 측정”을 누르세요.', 'ok');
+  }
 
-      const widthPx = metersToPixels(realWidthM * scale, distanceM);
-      const heightPx = widthPx / imageAspect;
-
-      let x = placement.centerX;
-      let y = placement.centerY;
-
-      if (currentOrientation.alpha != null && placement.alpha != null) {
-        const deltaYaw = degToRad(angleDiffDeg(currentOrientation.alpha, placement.alpha));
-        x = placement.centerX - Math.tan(deltaYaw) / Math.tan(degToRad(H_FOV_DEG) / 2) * window.innerWidth / 2;
-      }
-
-      if (currentOrientation.beta != null && placement.beta != null) {
-        const deltaPitch = degToRad(currentOrientation.beta - placement.beta);
-        y = placement.centerY + Math.tan(deltaPitch) / Math.tan(degToRad(V_FOV_DEG) / 2) * window.innerHeight / 2;
-      }
-
-      const roll = currentOrientation.gamma == null ? 0 : -currentOrientation.gamma;
-
-      placedImage.style.width = `${widthPx}px`;
-      placedImage.style.height = `${heightPx}px`;
-      placedImage.style.left = `${x}px`;
-      placedImage.style.top = `${y}px`;
-      placedImage.style.transform = `translate(-50%, -50%) rotate(${roll}deg)`;
+  function measure() {
+    if (zeroBeta == null) {
+      setStatus('먼저 벽 눈높이를 정면으로 비춘 상태에서 “수평 기준 저장”을 눌러야 합니다.', 'warn');
+      return;
+    }
+    if (ori.beta == null) {
+      setStatus('센서값이 없습니다. 거리 m 값을 직접 입력해 주세요.', 'warn');
+      return;
     }
 
-    function loop() {
-      updatePlacedImage();
-      requestAnimationFrame(loop);
+    const deltaDeg = Math.abs(angleDiff(ori.beta, zeroBeta));
+    if (deltaDeg < 3) {
+      setStatus('기울기 차이가 너무 작습니다. 벽/바닥선이 중앙에 오도록 폰을 더 아래로 기울여 주세요.', 'warn');
+      return;
+    }
+    if (deltaDeg > 80) {
+      setStatus('기울기가 너무 큽니다. 측정 자세를 다시 잡아 주세요.', 'warn');
+      return;
     }
 
-    startBtn.addEventListener('click', startCameraAndSensors);
-    measureBtn.addEventListener('click', measureDistance);
-    placeBtn.addEventListener('click', placeImage);
-    distanceInput.addEventListener('input', updatePlacedImage);
-    realWidthInput.addEventListener('input', updatePlacedImage);
-    scaleInput.addEventListener('input', updatePlacedImage);
+    const h = Number(cameraHeight.value) / 100;
+    const d = h / Math.tan(rad(deltaDeg));
+    const result = clamp(d, 0.2, 20);
+    distance.value = result.toFixed(2);
+    setStatus(`거리 측정값: 약 ${result.toFixed(2)}m. 이제 벽 눈높이에 십자를 맞추고 이미지를 배치하세요.`, 'ok');
+    updateImage();
+  }
 
-    imageInput.addEventListener('change', () => {
-      const file = imageInput.files && imageInput.files[0];
-      if (!file) return;
+  function metersToPixels(widthM, distM) {
+    const visibleWidthM = 2 * distM * Math.tan(rad(H_FOV_DEG) / 2);
+    return window.innerWidth * (widthM / visibleWidthM);
+  }
 
-      const url = URL.createObjectURL(file);
-      placedImage.onload = () => {
-        imageAspect = placedImage.naturalWidth / placedImage.naturalHeight;
-        hasImage = true;
-        setStatus('이미지 선택 완료. 거리 측정 후 이미지 배치를 누르세요.');
-      };
-      placedImage.src = url;
-    });
+  function placeImage() {
+    if (!hasImage) {
+      setStatus('먼저 이미지를 선택하세요.', 'warn');
+      return;
+    }
+    placement = {
+      alpha: ori.alpha,
+      beta: ori.beta,
+      x: window.innerWidth / 2,
+      y: window.innerHeight / 2
+    };
+    img.style.display = 'block';
+    updateImage();
+    setStatus('이미지 배치 완료. 거리/실제폭/크기를 조절해 보세요.', 'ok');
+  }
 
-    window.addEventListener('resize', updatePlacedImage);
-    loop();
-  </script>
+  function updateImage() {
+    if (!placement || !hasImage) return;
+
+    const distM = Math.max(0.2, Number(distance.value) || 2);
+    const widthM = Math.max(0.05, Number(realWidth.value) / 100 || 1);
+    const s = Number(scale.value) || 1;
+    const w = metersToPixels(widthM * s, distM);
+    const h = w / imageAspect;
+
+    let x = placement.x;
+    let y = placement.y;
+
+    if (ori.alpha != null && placement.alpha != null) {
+      const dx = rad(angleDiff(ori.alpha, placement.alpha));
+      x = placement.x - Math.tan(dx) / Math.tan(rad(H_FOV_DEG) / 2) * window.innerWidth / 2;
+    }
+    if (ori.beta != null && placement.beta != null) {
+      const dy = rad(angleDiff(ori.beta, placement.beta));
+      x = x; // 명시적으로 유지
+      y = placement.y + Math.tan(dy) / Math.tan(rad(50) / 2) * window.innerHeight / 2;
+    }
+
+    img.style.width = `${w}px`;
+    img.style.height = `${h}px`;
+    img.style.left = `${x}px`;
+    img.style.top = `${y}px`;
+    img.style.transform = 'translate(-50%, -50%)';
+  }
+
+  function loop() {
+    updateImage();
+    requestAnimationFrame(loop);
+  }
+
+  startBtn.addEventListener('click', start);
+  zeroBtn.addEventListener('click', saveHorizontalZero);
+  measureBtn.addEventListener('click', measure);
+  placeBtn.addEventListener('click', placeImage);
+  cameraHeight.addEventListener('input', updateImage);
+  distance.addEventListener('input', updateImage);
+  realWidth.addEventListener('input', updateImage);
+  scale.addEventListener('input', updateImage);
+  window.addEventListener('resize', updateImage);
+
+  file.addEventListener('change', () => {
+    const f = file.files && file.files[0];
+    if (!f) return;
+    const url = URL.createObjectURL(f);
+    img.onload = () => {
+      imageAspect = img.naturalWidth / img.naturalHeight;
+      hasImage = true;
+      setStatus('이미지 선택 완료. 거리 측정 후 벽 눈높이에 맞춰 이미지 배치를 누르세요.', 'ok');
+    };
+    img.src = url;
+  });
+
+  loop();
+</script>
 </body>
 </html>
