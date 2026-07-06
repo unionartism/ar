@@ -371,7 +371,7 @@ function tryPlaceOnDetectedVerticalPlane(frame) {
     return false;
   }
 
-  placePosterFromPose(result.pose, "plane");
+  placePosterOnWallInfo(result, "plane-detection");
   return true;
 }
 
@@ -379,42 +379,26 @@ function findBestVerticalPlane(frame, planes) {
   let best = null;
   let bestScore = Number.POSITIVE_INFINITY;
 
-  const cameraWorldPosition = new THREE.Vector3();
-  camera.getWorldPosition(cameraWorldPosition);
-
   for (const plane of planes) {
-    const pose = frame.getPose(plane.planeSpace, xrReferenceSpace);
-    if (!pose) continue;
-
-    const position = xrPositionToVector3(pose.transform.position);
-    const quaternion = xrOrientationToQuaternion(pose.transform.orientation);
-
-    const normal = new THREE.Vector3(0, 0, 1)
-      .applyQuaternion(quaternion)
-      .normalize();
+    const info = getPlaneWorldInfo(frame, plane);
+    if (!info) continue;
 
     const apiSaysVertical = plane.orientation === "vertical";
-    const inferredVertical = Math.abs(normal.y) < 0.35;
+    const inferredVertical = Math.abs(info.normal.y) < 0.5;
 
     if (!apiSaysVertical && !inferredVertical) {
       continue;
     }
 
-    const distance = position.distanceTo(cameraWorldPosition);
+    if (!isGoodWallPlane(info)) {
+      continue;
+    }
 
-    // 너무 가까운 plane이나 너무 먼 plane은 우선순위를 낮춘다.
-    const score = Math.abs(distance - DEFAULT_DISTANCE_M);
+    const score = scoreWallPlane(info);
 
     if (score < bestScore) {
       bestScore = score;
-      best = {
-        plane,
-        pose,
-        position,
-        quaternion,
-        normal,
-        distance,
-      };
+      best = info;
     }
   }
 
@@ -438,13 +422,24 @@ function placePosterFromPose(pose, source) {
   if (!pose || !posterRoot) return;
 
   const position = xrPositionToVector3(pose.transform.position);
-  const quaternion = xrOrientationToQuaternion(pose.transform.orientation);
+  const rawQuaternion = xrOrientationToQuaternion(pose.transform.orientation);
+
+  let normal = new THREE.Vector3(0, 0, 1)
+    .applyQuaternion(rawQuaternion)
+    .normalize();
+
+  const cam = getCameraWorldInfo();
+  const toCamera = cam.position.clone().sub(position).normalize();
+
+  if (normal.dot(toCamera) < 0) {
+    normal.negate();
+  }
+
+  const quaternion = buildWallAlignedQuaternion(normal);
 
   posterRoot.position.copy(position);
   posterRoot.quaternion.copy(quaternion);
-
-  facePosterTowardCameraIfNeeded();
-
+  posterRoot.position.add(normal.clone().multiplyScalar(0.01));
   posterRoot.visible = true;
 
   setStatus(`${product.name} 배치됨`);
@@ -522,6 +517,175 @@ function facePosterTowardCameraIfNeeded() {
   if (facingScore < 0) {
     posterRoot.rotateY(Math.PI);
   }
+}
+
+function xrMatrixToMatrix4(matrix) {
+  return new THREE.Matrix4().fromArray(matrix);
+}
+
+function getCameraWorldInfo() {
+  const position = new THREE.Vector3();
+  const direction = new THREE.Vector3();
+
+  camera.getWorldPosition(position);
+  camera.getWorldDirection(direction);
+
+  direction.normalize();
+
+  return {
+    position,
+    direction,
+  };
+}
+
+function getPlaneWorldInfo(frame, plane) {
+  const pose = frame.getPose(plane.planeSpace, xrReferenceSpace);
+  if (!pose) return null;
+
+  const matrix = xrMatrixToMatrix4(pose.transform.matrix);
+  const quaternion = xrOrientationToQuaternion(pose.transform.orientation);
+
+  let localCenter = new THREE.Vector3(0, 0, 0);
+
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+
+  if (plane.polygon && plane.polygon.length > 0) {
+    plane.polygon.forEach((point) => {
+      localCenter.x += point.x;
+      localCenter.y += point.y;
+      localCenter.z += point.z;
+
+      minX = Math.min(minX, point.x);
+      maxX = Math.max(maxX, point.x);
+      minY = Math.min(minY, point.y);
+      maxY = Math.max(maxY, point.y);
+      minZ = Math.min(minZ, point.z);
+      maxZ = Math.max(maxZ, point.z);
+    });
+
+    localCenter.divideScalar(plane.polygon.length);
+  }
+
+  const worldCenter = localCenter.clone().applyMatrix4(matrix);
+
+  let width = 0;
+  let height = 0;
+
+  if (Number.isFinite(minX)) {
+    width = Math.max(maxX - minX, maxZ - minZ);
+    height = Math.max(maxY - minY, maxZ - minZ);
+  }
+
+  let normal = new THREE.Vector3(0, 0, 1)
+    .applyQuaternion(quaternion)
+    .normalize();
+
+  const cam = getCameraWorldInfo();
+  const toCamera = cam.position.clone().sub(worldCenter).normalize();
+
+  // normal이 카메라 반대 방향이면 뒤집는다.
+  if (normal.dot(toCamera) < 0) {
+    normal.negate();
+  }
+
+  return {
+    plane,
+    pose,
+    position: worldCenter,
+    normal,
+    width,
+    height,
+    distance: worldCenter.distanceTo(cam.position),
+  };
+}
+
+function buildWallAlignedQuaternion(normal) {
+  const zAxis = normal.clone().normalize();
+  const worldUp = new THREE.Vector3(0, 1, 0);
+
+  // 포스터의 위쪽을 항상 월드 위쪽으로 맞춘다.
+  const yAxis = worldUp
+    .clone()
+    .sub(zAxis.clone().multiplyScalar(worldUp.dot(zAxis)));
+
+  if (yAxis.lengthSq() < 0.0001) {
+    yAxis.set(0, 1, 0);
+  }
+
+  yAxis.normalize();
+
+  const xAxis = yAxis.clone().cross(zAxis).normalize();
+
+  const matrix = new THREE.Matrix4();
+  matrix.makeBasis(xAxis, yAxis, zAxis);
+
+  const quaternion = new THREE.Quaternion();
+  quaternion.setFromRotationMatrix(matrix);
+
+  return quaternion;
+}
+
+function isGoodWallPlane(info) {
+  if (!info) return false;
+
+  const cam = getCameraWorldInfo();
+  const toPlane = info.position.clone().sub(cam.position).normalize();
+
+  const frontScore = cam.direction.dot(toPlane);
+
+  // 카메라 앞쪽에 있는 plane만 사용
+  if (frontScore < 0.25) return false;
+
+  // 너무 가까운/먼 plane 제외
+  if (info.distance < 0.35 || info.distance > 4.0) return false;
+
+  // normal이 위/아래를 많이 향하면 벽이 아니라 바닥/천장일 가능성
+  if (Math.abs(info.normal.y) > 0.55) return false;
+
+  return true;
+}
+
+function scoreWallPlane(info) {
+  const cam = getCameraWorldInfo();
+  const toPlane = info.position.clone().sub(cam.position).normalize();
+
+  // 화면 중앙에 가까울수록 좋음
+  const centerScore = 1 - cam.direction.dot(toPlane);
+
+  // 기본 거리 1.6m 근처 선호
+  const distanceScore = Math.abs(info.distance - DEFAULT_DISTANCE_M);
+
+  // 제품이 들어갈 만한 plane이면 보너스
+  const sizeBonus =
+    info.width >= product.widthM * 0.5 && info.height >= product.heightM * 0.5
+      ? -0.25
+      : 0.15;
+
+  return centerScore * 2.0 + distanceScore * 0.6 + sizeBonus;
+}
+
+function placePosterOnWallInfo(info, source) {
+  if (!info || !posterRoot) return;
+
+  const quaternion = buildWallAlignedQuaternion(info.normal);
+
+  posterRoot.position.copy(info.position);
+  posterRoot.quaternion.copy(quaternion);
+
+  // z-fighting 방지: 벽에서 살짝 앞으로 띄움
+  posterRoot.position.add(info.normal.clone().multiplyScalar(0.01));
+
+  posterRoot.visible = true;
+
+  setStatus(`${product.name} 벽면에 배치됨`);
+  setLog(
+    `${source} | 거리 ${info.distance.toFixed(2)}m | normal ${info.normal.x.toFixed(2)}, ${info.normal.y.toFixed(2)}, ${info.normal.z.toFixed(2)}`,
+  );
 }
 
 function xrPositionToVector3(position) {
