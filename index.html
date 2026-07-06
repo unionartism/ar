@@ -3,20 +3,30 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Wall Distance MVP v2</title>
+  <title>Wall Distance MVP v3</title>
   <style>
     html, body { margin:0; height:100%; overflow:hidden; background:#000; color:#fff; font-family:system-ui,-apple-system,sans-serif; }
     #app { position:fixed; inset:0; background:#000; }
     video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; background:#111; }
     #img { position:absolute; display:none; max-width:none; transform-origin:center; pointer-events:none; box-shadow:0 2px 12px rgba(0,0,0,.35); }
+
     .cross { position:absolute; left:50%; top:50%; width:54px; height:54px; transform:translate(-50%,-50%); pointer-events:none; }
     .cross:before, .cross:after { content:""; position:absolute; background:#fff; box-shadow:0 0 4px #000; }
     .cross:before { left:26px; top:0; width:2px; height:54px; }
     .cross:after { left:0; top:26px; width:54px; height:2px; }
-    .panel { position:absolute; left:8px; right:8px; bottom:calc(8px + env(safe-area-inset-bottom)); padding:10px; border-radius:12px; background:rgba(0,0,0,.74); font-size:13px; }
+
+    #measureGuide { display:none; position:absolute; inset:0; pointer-events:none; }
+    #measureGuide.on { display:block; }
+    .horizonLine { position:absolute; left:0; right:0; top:50%; height:3px; transform:translateY(-50%); background:#33ff88; box-shadow:0 0 0 1px rgba(0,0,0,.8), 0 0 12px rgba(51,255,136,.7); }
+    .horizonBand { position:absolute; left:0; right:0; top:calc(50% - 22px); height:44px; border-top:1px dashed rgba(51,255,136,.8); border-bottom:1px dashed rgba(51,255,136,.8); background:rgba(51,255,136,.08); }
+    .guideText { position:absolute; left:50%; top:calc(50% + 28px); transform:translateX(-50%); background:rgba(0,0,0,.72); padding:7px 10px; border-radius:999px; font-size:13px; white-space:nowrap; }
+    .angleBadge { position:absolute; left:50%; top:calc(50% - 72px); transform:translateX(-50%); background:rgba(0,0,0,.72); padding:7px 10px; border-radius:999px; font-size:13px; white-space:nowrap; }
+
+    .panel { position:absolute; left:8px; right:8px; bottom:calc(8px + env(safe-area-inset-bottom)); padding:10px; border-radius:12px; background:rgba(0,0,0,.76); font-size:13px; }
     .row { display:flex; gap:6px; align-items:center; margin-top:7px; flex-wrap:wrap; }
     .row:first-child { margin-top:0; }
     button, label { border:0; border-radius:8px; padding:8px 9px; background:#fff; color:#111; font-weight:700; font-size:13px; }
+    button.secondary { background:#dff6ff; }
     input { border:0; border-radius:8px; padding:7px; font-size:13px; }
     input[type="number"] { width:72px; }
     input[type="range"] { flex:1; min-width:120px; padding:0; }
@@ -24,8 +34,8 @@
     .muted { color:rgba(255,255,255,.75); }
     .ok { color:#a7ffb5; }
     .warn { color:#ffd48a; }
-    #status { line-height:1.35; }
-    #debug { margin-top:7px; line-height:1.35; font-size:12px; word-break:break-word; }
+    #status { line-height:1.35; white-space:pre-line; }
+    #debug { margin-top:7px; line-height:1.35; font-size:12px; word-break:break-word; white-space:pre-line; }
   </style>
 </head>
 <body>
@@ -34,13 +44,21 @@
   <img id="img" alt="배치 이미지" />
   <div class="cross"></div>
 
+  <div id="measureGuide">
+    <div class="horizonBand"></div>
+    <div class="horizonLine"></div>
+    <div id="angleBadge" class="angleBadge">각도차 -°</div>
+    <div id="guideText" class="guideText">벽과 바닥이 만나는 선을 초록선에 맞추세요</div>
+  </div>
+
   <div class="panel">
-    <div id="status" class="muted">1) 카메라+센서 시작 → 2) 수평 기준 저장 → 3) 벽/바닥선 측정</div>
+    <div id="status" class="muted">1) 센서 권한 요청 → 2) 카메라 시작 → 3) 수평 기준 저장 → 4) 벽/바닥선 측정</div>
 
     <div class="row">
-      <button id="startBtn">카메라+센서 시작</button>
-      <button id="zeroBtn">수평 기준 저장</button>
-      <button id="measureBtn">벽/바닥선 측정</button>
+      <button id="sensorBtn">센서 권한 요청</button>
+      <button id="startBtn">카메라 시작</button>
+      <button id="zeroBtn" class="secondary">수평 기준 저장</button>
+      <button id="measureBtn" class="secondary">벽/바닥선 측정</button>
     </div>
 
     <div class="row">
@@ -72,7 +90,10 @@
   const img = document.getElementById('img');
   const statusEl = document.getElementById('status');
   const debugEl = document.getElementById('debug');
+  const guideEl = document.getElementById('measureGuide');
+  const angleBadge = document.getElementById('angleBadge');
 
+  const sensorBtn = document.getElementById('sensorBtn');
   const startBtn = document.getElementById('startBtn');
   const zeroBtn = document.getElementById('zeroBtn');
   const measureBtn = document.getElementById('measureBtn');
@@ -91,6 +112,9 @@
   let orientationCount = 0;
   let motionCount = 0;
   let permissionText = '권한 미요청';
+  let sensorListenersAttached = false;
+  let sensorsRequested = false;
+  let cameraStarted = false;
 
   let zero = null;
   let imageAspect = 1;
@@ -100,6 +124,10 @@
   function setStatus(text, cls='muted') {
     statusEl.className = cls;
     statusEl.textContent = text;
+  }
+
+  function showGuide(on) {
+    guideEl.classList.toggle('on', !!on);
   }
 
   function rad(deg) { return deg * Math.PI / 180; }
@@ -146,7 +174,7 @@
     if (!zero) return { value:null, source:'none' };
 
     const gDelta = gravityAngleDeg(zero.gravity, gravity);
-    if (gDelta != null && gDelta >= 0.5) {
+    if (gDelta != null && gDelta >= 0.3) {
       return { value:gDelta, source:'motion/gravity' };
     }
 
@@ -161,6 +189,7 @@
   function updateDebug() {
     const age = freshestSensorAgeMs();
     const delta = getDeltaDeg();
+    angleBadge.textContent = `각도차 ${fmt(delta.value)}° / ${delta.source}`;
     debugEl.textContent =
       `${permissionText}\n` +
       `orientation ${orientationCount}회: alpha ${fmt(ori.alpha)} / beta ${fmt(ori.beta)} / gamma ${fmt(ori.gamma)}\n` +
@@ -168,22 +197,9 @@
       `기준: ${zero ? '저장됨' : '없음'} / 각도차 ${fmt(delta.value)}° / 소스 ${delta.source} / 마지막수신 ${age == null ? '-' : age + 'ms 전'}`;
   }
 
-  async function requestIfNeeded(EventClass, label) {
-    if (typeof EventClass === 'undefined') return `${label}: 미지원`;
-    if (typeof EventClass.requestPermission !== 'function') return `${label}: 권한요청 불필요`;
-
-    try {
-      const res = await EventClass.requestPermission();
-      return `${label}: ${res}`;
-    } catch (e) {
-      return `${label}: 실패(${e.name || 'error'})`;
-    }
-  }
-
-  async function requestSensors() {
-    const oriRes = await requestIfNeeded(window.DeviceOrientationEvent, 'orientation');
-    const motRes = await requestIfNeeded(window.DeviceMotionEvent, 'motion');
-    permissionText = `권한: ${oriRes} / ${motRes}`;
+  function attachSensorListeners() {
+    if (sensorListenersAttached) return;
+    sensorListenersAttached = true;
 
     window.addEventListener('deviceorientation', (e) => {
       orientationCount += 1;
@@ -197,8 +213,8 @@
     }, true);
 
     window.addEventListener('devicemotion', (e) => {
-      const g = e.accelerationIncludingGravity;
       motionCount += 1;
+      const g = e.accelerationIncludingGravity;
       if (g && g.x != null && g.y != null && g.z != null) {
         gravity = {
           x: g.x,
@@ -209,22 +225,52 @@
       }
       updateDebug();
     }, true);
+  }
 
+  async function requestOnePermission(EventClass, label) {
+    if (typeof EventClass === 'undefined') return `${label}: 미지원`;
+    if (typeof EventClass.requestPermission !== 'function') return `${label}: 권한요청 API 없음`;
+
+    try {
+      const res = await EventClass.requestPermission();
+      return `${label}: ${res}`;
+    } catch (e) {
+      return `${label}: 실패(${e.name || 'error'})`;
+    }
+  }
+
+  async function requestSensors() {
+    attachSensorListeners();
+
+    if (!window.isSecureContext) {
+      permissionText = '권한: HTTPS 아님';
+      setStatus('HTTPS 환경이 아닙니다. GitHub Pages HTTPS 주소에서 접속해야 센서/카메라가 안정적으로 동작합니다.', 'warn');
+      updateDebug();
+      return;
+    }
+
+    // 중요: iOS에서는 이 함수가 반드시 버튼 클릭 콜스택에서 바로 호출되어야 합니다.
+    const motRes = await requestOnePermission(window.DeviceMotionEvent, 'motion');
+    const oriRes = await requestOnePermission(window.DeviceOrientationEvent, 'orientation');
+    sensorsRequested = true;
+    permissionText = `권한: ${motRes} / ${oriRes}`;
     updateDebug();
+
+    setStatus('센서 권한 요청 완료. 이제 카메라를 시작하거나, 이미 켜져 있다면 센서 수신을 확인합니다.', 'ok');
 
     setTimeout(() => {
       updateDebug();
       if (orientationCount === 0 && motionCount === 0) {
-        setStatus('센서 이벤트가 들어오지 않습니다. 거리값은 직접 입력해 주세요. iOS라면 Safari, HTTPS, 설정의 동작/방향 접근을 확인하세요.', 'warn');
+        setStatus('권한 요청은 했지만 센서 이벤트가 아직 없습니다. iOS 설정 > Safari > 동작 및 방향 접근이 켜져 있는지 확인하세요. 거리값 직접 입력은 가능합니다.', 'warn');
       } else if (!gravityReady(gravity) && ori.beta == null) {
-        setStatus('센서 이벤트는 있지만 거리 계산에 필요한 값이 부족합니다. 거리 m 값을 직접 입력하거나 다른 브라우저로 테스트하세요.', 'warn');
+        setStatus('센서 이벤트는 있으나 거리 계산값이 부족합니다. 폰을 조금 움직여 보거나 거리 m 값을 직접 입력하세요.', 'warn');
       } else {
-        setStatus('센서 수신 확인. 벽 눈높이에 정면으로 비추고 “수평 기준 저장”을 누르세요.', 'ok');
+        setStatus('센서 수신 확인. 벽 눈높이를 정면으로 비추고 “수평 기준 저장”을 누르세요.', 'ok');
       }
-    }, 1500);
+    }, 1200);
   }
 
-  async function start() {
+  async function startCamera() {
     try {
       if (!window.isSecureContext) {
         setStatus('HTTPS 환경이 아닙니다. GitHub Pages HTTPS 주소에서 접속해야 합니다.', 'warn');
@@ -245,12 +291,17 @@
       });
       video.srcObject = stream;
       await video.play();
+      cameraStarted = true;
 
-      await requestSensors();
-      setStatus('카메라 준비 완료. 센서 수신을 확인하는 중입니다.', 'ok');
+      if (!sensorsRequested) {
+        setStatus('카메라 시작 완료. iOS에서는 “센서 권한 요청” 버튼을 따로 눌러 주세요.', 'ok');
+      } else {
+        setStatus('카메라 시작 완료. 벽 눈높이를 정면으로 비추고 “수평 기준 저장”을 누르세요.', 'ok');
+      }
+      updateDebug();
     } catch (e) {
       console.error(e);
-      setStatus('카메라/센서 권한 또는 HTTPS 환경을 확인하세요. iPhone은 Safari에서 테스트하세요.', 'warn');
+      setStatus(`카메라 시작 실패: ${e.name || 'error'}. HTTPS, Safari/Chrome 권한을 확인하세요.`, 'warn');
       updateDebug();
     }
   }
@@ -260,7 +311,7 @@
     const canUseBeta = ori.beta != null;
 
     if (!canUseGravity && !canUseBeta) {
-      setStatus('센서값이 부족합니다. 아래 디버그에서 motion 또는 beta 값이 들어오는지 확인하세요. 거리값은 직접 입력 가능합니다.', 'warn');
+      setStatus('센서값이 부족합니다. 먼저 “센서 권한 요청”을 누르고, 디버그에서 motion 또는 beta 값이 들어오는지 확인하세요. 거리 m 직접 입력은 가능합니다.', 'warn');
       updateDebug();
       return;
     }
@@ -271,29 +322,32 @@
       gravity: canUseGravity ? { x:gravity.x, y:gravity.y, z:gravity.z } : null
     };
 
-    setStatus('수평 기준 저장 완료. 이제 벽과 바닥이 만나는 선을 중앙 십자에 맞추고 “벽/바닥선 측정”을 누르세요.', 'ok');
+    showGuide(true);
+    setStatus('수평 기준 저장 완료. 화면의 초록 수평선에 벽과 바닥이 만나는 선을 맞춘 뒤 “벽/바닥선 측정”을 누르세요.', 'ok');
     updateDebug();
   }
 
   function measure() {
     if (!zero) {
+      showGuide(false);
       setStatus('먼저 벽 눈높이를 정면으로 비춘 상태에서 “수평 기준 저장”을 눌러야 합니다.', 'warn');
       return;
     }
 
+    showGuide(true);
     const delta = getDeltaDeg();
     const deltaDeg = delta.value;
 
     if (deltaDeg == null) {
-      setStatus('거리 계산에 필요한 센서값이 부족합니다. 거리 m 값을 직접 입력해 주세요.', 'warn');
+      setStatus('거리 계산에 필요한 센서값이 부족합니다. 초록선에 벽/바닥선을 맞춘 상태에서 다시 시도하거나 거리 m 값을 직접 입력해 주세요.', 'warn');
       return;
     }
     if (deltaDeg < 3) {
-      setStatus(`기울기 차이가 ${deltaDeg.toFixed(1)}°로 너무 작습니다. 벽/바닥선이 중앙에 오도록 폰을 더 아래로 기울여 주세요.`, 'warn');
+      setStatus(`기울기 차이가 ${deltaDeg.toFixed(1)}°로 너무 작습니다. 초록선에 벽/바닥선이 오도록 폰을 더 아래로 기울여 주세요.`, 'warn');
       return;
     }
     if (deltaDeg > 80) {
-      setStatus(`기울기 차이가 ${deltaDeg.toFixed(1)}°로 너무 큽니다. 측정 자세를 다시 잡아 주세요.`, 'warn');
+      setStatus(`기울기 차이가 ${deltaDeg.toFixed(1)}°로 너무 큽니다. 폰을 덜 기울인 상태에서 벽/바닥선을 초록선에 맞춰 주세요.`, 'warn');
       return;
     }
 
@@ -301,6 +355,7 @@
     const d = h / Math.tan(rad(deltaDeg));
     const result = clamp(d, 0.2, 20);
     distance.value = result.toFixed(2);
+    showGuide(false);
     setStatus(`거리 측정값: 약 ${result.toFixed(2)}m (${delta.source}, ${deltaDeg.toFixed(1)}°). 이제 벽 눈높이에 십자를 맞추고 이미지를 배치하세요.`, 'ok');
     updateImage();
   }
@@ -315,6 +370,7 @@
       setStatus('먼저 이미지를 선택하세요.', 'warn');
       return;
     }
+    showGuide(false);
     placement = {
       alpha: ori.alpha,
       beta: ori.beta,
@@ -356,10 +412,12 @@
 
   function loop() {
     updateImage();
+    updateDebug();
     requestAnimationFrame(loop);
   }
 
-  startBtn.addEventListener('click', start);
+  sensorBtn.addEventListener('click', requestSensors);
+  startBtn.addEventListener('click', startCamera);
   zeroBtn.addEventListener('click', saveHorizontalZero);
   measureBtn.addEventListener('click', measure);
   placeBtn.addEventListener('click', placeImage);
@@ -381,7 +439,7 @@
     img.src = url;
   });
 
-  setInterval(updateDebug, 500);
+  updateDebug();
   loop();
 </script>
 </body>
