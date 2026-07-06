@@ -127,17 +127,29 @@ AFRAME.registerComponent('poster-ar-app', {
     this.bindUI()
     this.configureXR8()
 
+    console.log('[Poster AR] component initialized', {
+      cameraEl: this.cameraEl,
+      posterEl: this.posterEl,
+      borderEl: this.borderEl,
+      product: this.product,
+    })
+
     setStatus('8th Wall Engine 로딩 중...')
   },
 
   bindSceneEvents() {
     this.el.addEventListener('loaded', () => {
       this.sceneLoaded = true
+
+      console.log('[Poster AR] scene loaded')
+
       setStatus('Scene 로드됨. 카메라 권한을 허용하세요.')
     })
 
     this.el.addEventListener('renderstart', () => {
       this.sceneLoaded = true
+
+      console.log('[Poster AR] renderstart')
 
       if (!this.ready) {
         setStatus('AR 렌더링 시작됨. 트래킹이 잡히면 “이미지 배치”를 누르세요.')
@@ -147,16 +159,20 @@ AFRAME.registerComponent('poster-ar-app', {
     this.el.addEventListener('realityready', () => {
       this.ready = true
       this.sceneLoaded = true
+
+      console.log('[Poster AR] realityready')
+
       setStatus('트래킹 시작됨. 벽 앞에서 화면 중앙을 맞춘 뒤 “이미지 배치”를 누르세요.')
     })
 
     this.el.addEventListener('realityerror', (event) => {
-      console.error('realityerror:', event.detail)
+      console.error('[Poster AR] realityerror:', event.detail)
+
       setStatus(`8th Wall 오류: ${event.detail?.error || '알 수 없음'}`)
     })
 
     this.el.addEventListener('xrtrackingstatus', (event) => {
-      console.log('xrtrackingstatus:', event.detail)
+      console.log('[Poster AR] xrtrackingstatus:', event.detail)
     })
   },
 
@@ -169,6 +185,8 @@ AFRAME.registerComponent('poster-ar-app', {
             enableLighting: true,
             scale: 'absolute',
           })
+
+          console.log('[Poster AR] XR8 configured')
         }
       } catch (err) {
         console.warn('[Poster AR] XR8 configure skipped:', err)
@@ -183,18 +201,38 @@ AFRAME.registerComponent('poster-ar-app', {
   },
 
   bindUI() {
-    $('placePoster')?.addEventListener('click', () => {
+    const placeButton = $('placePoster')
+
+    if (!placeButton) {
+      console.error('[Poster AR] #placePoster button not found')
+    }
+
+    placeButton?.addEventListener('click', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+
+      console.log('[Poster AR] place button clicked')
+
+      setStatus('이미지 배치 버튼 눌림. 포스터 생성 시도 중...')
+
       this.placePosterAtCenter()
     })
 
-    $('resetPlacement')?.addEventListener('click', () => {
+    $('resetPlacement')?.addEventListener('click', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+
       this.hidePoster()
       this.baseQuaternion = null
       this.setPlacedState(false)
+
       setStatus('다시 배치할 위치를 화면 중앙에 맞춘 뒤 “이미지 배치”를 누르세요.')
     })
 
-    $('recenter')?.addEventListener('click', () => {
+    $('recenter')?.addEventListener('click', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+
       const ok = tryRecenter()
 
       if (ok) {
@@ -204,52 +242,88 @@ AFRAME.registerComponent('poster-ar-app', {
       }
     })
 
-    $('scaleDown')?.addEventListener('click', () => {
+    $('scaleDown')?.addEventListener('click', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+
       this.adjustScale(-this.data.scaleStep)
     })
 
-    $('scaleUp')?.addEventListener('click', () => {
+    $('scaleUp')?.addEventListener('click', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+
       this.adjustScale(this.data.scaleStep)
     })
 
-    $('scaleReset')?.addEventListener('click', () => {
+    $('scaleReset')?.addEventListener('click', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+
       this.setScale(1)
     })
 
-    $('scaleFit')?.addEventListener('click', () => {
+    $('scaleFit')?.addEventListener('click', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+
       this.fitToActualSize()
     })
 
-    $('moveUp')?.addEventListener('click', () => {
+    $('moveUp')?.addEventListener('click', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+
       this.movePosterLocal(0, this.data.moveStepM, 0)
     })
 
-    $('moveDown')?.addEventListener('click', () => {
+    $('moveDown')?.addEventListener('click', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+
       this.movePosterLocal(0, -this.data.moveStepM, 0)
     })
 
-    $('moveCloser')?.addEventListener('click', () => {
+    $('moveCloser')?.addEventListener('click', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+
       this.movePosterDepth(this.data.depthStepM)
     })
 
-    $('moveFarther')?.addEventListener('click', () => {
+    $('moveFarther')?.addEventListener('click', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+
       this.movePosterDepth(-this.data.depthStepM)
     })
 
-    $('rotateLeft')?.addEventListener('click', () => {
+    $('rotateLeft')?.addEventListener('click', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+
       this.rotatePosterYaw(THREE.MathUtils.degToRad(this.data.rotateStepDeg))
     })
 
-    $('rotateRight')?.addEventListener('click', () => {
+    $('rotateRight')?.addEventListener('click', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+
       this.rotatePosterYaw(THREE.MathUtils.degToRad(-this.data.rotateStepDeg))
     })
 
-    $('rotateReset')?.addEventListener('click', () => {
+    $('rotateReset')?.addEventListener('click', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+
       this.resetPosterRotation()
     })
 
     document.querySelectorAll('.product').forEach((button) => {
-      button.addEventListener('click', () => {
+      button.addEventListener('click', (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+
         document.querySelectorAll('.product').forEach((b) => {
           b.classList.remove('selected')
         })
@@ -259,6 +333,11 @@ AFRAME.registerComponent('poster-ar-app', {
         const nextProduct = getProductById(button.dataset.productId)
 
         if (!isValidProduct(nextProduct)) {
+          console.error('[Poster AR] invalid selected product:', {
+            productId: button.dataset.productId,
+            product: nextProduct,
+          })
+
           setStatus('상품 정보를 찾을 수 없습니다. products.js를 확인하세요.')
           return
         }
@@ -272,33 +351,53 @@ AFRAME.registerComponent('poster-ar-app', {
         this.hidePoster()
         this.setPlacedState(false)
 
+        console.log('[Poster AR] product selected:', this.product)
+
         setStatus(`${this.product.name} 선택됨. 화면 중앙을 맞춘 뒤 “이미지 배치”를 누르세요.`)
       })
     })
 
     window.addEventListener('xrloaded', () => {
+      console.log('[Poster AR] xrloaded')
+
       setStatus('8th Wall Engine 로드됨. 카메라 권한을 허용하세요.')
     })
 
     window.addEventListener('error', (event) => {
-      console.error('window error:', event)
+      console.error('[Poster AR] window error:', event)
     })
+
+    console.log('[Poster AR] UI bound')
   },
 
   placePosterAtCenter() {
+    console.log('[Poster AR] placePosterAtCenter called', {
+      sceneLoaded: this.sceneLoaded,
+      ready: this.ready,
+      cameraEl: this.cameraEl,
+      posterEl: this.posterEl,
+      product: this.product,
+    })
+
     if (!this.cameraEl || !this.posterEl || !this.product) {
-      setStatus('AR 요소를 찾을 수 없습니다. index.html의 id를 확인하세요.')
+      console.error('[Poster AR] missing required elements', {
+        cameraEl: this.cameraEl,
+        posterEl: this.posterEl,
+        product: this.product,
+      })
+
+      setStatus('AR 요소를 찾을 수 없습니다. camera, posterPlane, products.js를 확인하세요.')
       return
     }
 
     if (!this.sceneLoaded) {
-      setStatus('아직 AR scene이 준비되지 않았습니다. 잠시 후 다시 누르세요.')
+      setStatus('아직 Scene이 준비되지 않았습니다. 잠시 후 다시 누르세요.')
       return
     }
 
     if (!this.ready) {
-      setStatus('아직 트래킹 준비 중입니다. 카메라를 천천히 움직인 뒤 다시 누르세요.')
-      return
+      console.warn('[Poster AR] tracking is not ready yet, but placing for debug')
+      setStatus('트래킹 준비 전이지만 디버그 배치를 시도합니다.')
     }
 
     this.el.object3D.updateMatrixWorld(true)
@@ -309,6 +408,11 @@ AFRAME.registerComponent('poster-ar-app', {
 
     this.cameraEl.object3D.getWorldPosition(camPos)
     this.cameraEl.object3D.getWorldDirection(camDir)
+
+    console.log('[Poster AR] camera info', {
+      camPos: camPos.clone(),
+      camDir: camDir.clone(),
+    })
 
     const forward = projectedHorizontal(camDir)
 
@@ -327,7 +431,7 @@ AFRAME.registerComponent('poster-ar-app', {
 
     posterObj.position.copy(center)
 
-    // 배치 순간 카메라 방향을 기준으로 포스터를 세운다.
+    // 배치 순간 카메라를 바라보게 한다.
     posterObj.lookAt(camPos.x, center.y, camPos.z)
 
     // a-plane 앞면 방향 보정
@@ -336,20 +440,28 @@ AFRAME.registerComponent('poster-ar-app', {
     // 회전 초기화를 위해 배치 순간의 기본 회전을 저장한다.
     this.baseQuaternion = posterObj.quaternion.clone()
 
+    // 디버깅용: material을 한 번 더 확실히 적용한다.
+    applyProductToPlane(this.posterEl, this.product)
+
     this.setScale(this.posterScale, {silent: true})
 
-    this.posterEl.setAttribute('visible', true)
+    this.posterEl.setAttribute('visible', 'true')
     posterObj.visible = true
 
     this.setPlacedState(true)
     this.syncBorder()
 
     console.log('[Poster AR] placed', {
-      camera: camPos,
-      forward,
-      center,
+      camera: camPos.clone(),
+      cameraDirection: camDir.clone(),
+      forward: forward.clone(),
+      center: center.clone(),
       product: this.product,
       scale: this.posterScale,
+      visibleAttribute: this.posterEl.getAttribute('visible'),
+      objectVisible: this.posterEl.object3D.visible,
+      posterPosition: this.posterEl.object3D.position.clone(),
+      posterRotation: this.posterEl.object3D.rotation.clone(),
     })
 
     setStatus(
@@ -509,9 +621,11 @@ AFRAME.registerComponent('poster-ar-app', {
 
     parts.forEach((p) => {
       const edge = document.createElement('a-box')
+
       edge.setAttribute('position', p.pos)
       edge.setAttribute('scale', p.scale)
       edge.setAttribute('material', 'shader: flat; color: #00e7ff; opacity: 0.95')
+
       this.borderEl.appendChild(edge)
     })
 
@@ -526,12 +640,12 @@ AFRAME.registerComponent('poster-ar-app', {
 
   hidePoster() {
     if (this.posterEl) {
-      this.posterEl.setAttribute('visible', false)
+      this.posterEl.setAttribute('visible', 'false')
       this.posterEl.object3D.visible = false
     }
 
     if (this.borderEl) {
-      this.borderEl.setAttribute('visible', false)
+      this.borderEl.setAttribute('visible', 'false')
       this.borderEl.object3D.visible = false
     }
   },
