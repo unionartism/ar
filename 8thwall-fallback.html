@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <title>8th Wall Fallback Wall AR</title>
+
+  <!--
+    This product includes the XR Engine software developed by Niantic Spatial, Inc.
+    Copyright © 2026 Niantic Spatial, Inc. All rights reserved.
+    License: https://github.com/8thwall/engine/blob/main/LICENSE
+  -->
+
+  <link rel="stylesheet" href="./style.css" />
+
+  <style>
+    .adjust-panel {
+      position: fixed;
+      z-index: 26;
+      left: 50%;
+      bottom: calc(86px + env(safe-area-inset-bottom, 0));
+      transform: translateX(-50%);
+      width: min(94vw, 430px);
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      padding: 9px;
+      border-radius: 18px;
+      background: rgba(0, 0, 0, .48);
+      border: 1px solid rgba(255, 255, 255, .12);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+
+    .adjust-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .adjust-label {
+      grid-column: 1 / -1;
+      font-size: 10px;
+      line-height: 1;
+      color: rgba(255, 255, 255, .62);
+      text-align: center;
+      font-weight: 800;
+      letter-spacing: .04em;
+    }
+
+    .adjust-panel button {
+      border: 1px solid rgba(255, 255, 255, .18);
+      border-radius: 999px;
+      min-height: 34px;
+      padding: 7px 6px;
+      background: rgba(255, 255, 255, .1);
+      color: white;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .adjust-panel button:active {
+      transform: translateY(1px);
+      background: rgba(0, 231, 255, .18);
+    }
+
+    .tap-guide {
+      position: fixed;
+      z-index: 21;
+      left: 50%;
+      top: 50%;
+      width: 48px;
+      height: 48px;
+      transform: translate(-50%, -50%);
+      border-radius: 999px;
+      border: 1px solid rgba(0, 231, 255, .88);
+      box-shadow: 0 0 0 9px rgba(0, 231, 255, .08);
+      pointer-events: none;
+    }
+
+    .tap-guide::before,
+    .tap-guide::after {
+      content: "";
+      position: absolute;
+      background: rgba(0, 231, 255, .9);
+    }
+
+    .tap-guide::before {
+      left: 50%;
+      top: 9px;
+      bottom: 9px;
+      width: 1px;
+      transform: translateX(-50%);
+    }
+
+    .tap-guide::after {
+      top: 50%;
+      left: 9px;
+      right: 9px;
+      height: 1px;
+      transform: translateY(-50%);
+    }
+
+    @media (max-height: 760px) {
+      .adjust-panel {
+        bottom: calc(76px + env(safe-area-inset-bottom, 0));
+      }
+
+      .adjust-panel button {
+        min-height: 30px;
+        font-size: 11px;
+      }
+    }
+
+    @media (max-height: 650px) {
+      .adjust-panel {
+        display: none;
+      }
+    }
+  </style>
+
+  <!-- 8th Wall / A-Frame stack. No npm build required. -->
+  <script src="https://cdn.8thwall.com/web/aframe/8frame-1.5.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@8thwall/xrextras@1/dist/xrextras.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@8thwall/landing-page@1/dist/landing-page.js" crossorigin="anonymous"></script>
+  <script async src="https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1/dist/xr.js" crossorigin="anonymous" data-preload-chunks="slam"></script>
+
+  <script src="./products.js"></script>
+  <script src="./wall-poc.js"></script>
+</head>
+<body>
+  <div id="hud" class="hud">
+    <div class="brand">8th Wall Fallback AR</div>
+    <div id="status" class="status">엔진 로딩 중...</div>
+  </div>
+
+  <div id="picker" class="picker">
+    <button class="product selected" data-product-id="poster-60x90">
+      <img src="./assets/poster-60x90.svg" alt="poster" />
+      <span>60×90cm</span>
+    </button>
+    <button class="product" data-product-id="frame-50x70">
+      <img src="./assets/frame-50x70.svg" alt="frame" />
+      <span>50×70cm</span>
+    </button>
+  </div>
+
+  <button id="recenter" class="recenter">다시 계산</button>
+
+  <div id="notice" class="notice">
+    <b>Fallback 모드</b><br />
+    실제 벽면 plane detection 대신, 카메라가 바라보는 방향에 수직 벽 후보를 배치합니다.<br />
+    화면 중앙을 벽에 맞춘 뒤 탭하거나, 하단 버튼으로 거리/높이/각도를 보정하세요.
+  </div>
+
+  <div class="tap-guide" aria-hidden="true"></div>
+
+  <div class="adjust-panel" aria-label="수동 보정">
+    <div class="adjust-group">
+      <div class="adjust-label">거리</div>
+      <button id="distanceNear" type="button">가깝게</button>
+      <button id="distanceFar" type="button">멀게</button>
+    </div>
+
+    <div class="adjust-group">
+      <div class="adjust-label">높이</div>
+      <button id="heightDown" type="button">아래</button>
+      <button id="heightUp" type="button">위</button>
+    </div>
+
+    <div class="adjust-group">
+      <div class="adjust-label">각도</div>
+      <button id="rotateLeft" type="button">좌</button>
+      <button id="rotateRight" type="button">우</button>
+    </div>
+  </div>
+
+  <a-scene
+    id="scene"
+    renderer="colorManagement: true; physicallyCorrectLights: true; antialias: true; alpha: true"
+    xrconfig="cameraDirection: back; allowedDevices: mobile"
+    xrweb="scale: absolute"
+    landing-pages
+    xrextras-loading
+    xrextras-runtime-error
+    xrextras-tap-recenter
+    wall-poc-controller>
+
+    <a-assets>
+      <img id="poster-60x90-img" src="./assets/poster-60x90.svg" crossorigin="anonymous" />
+      <img id="frame-50x70-img" src="./assets/frame-50x70.svg" crossorigin="anonymous" />
+    </a-assets>
+
+    <a-camera id="camera" position="0 1.6 0"></a-camera>
+
+    <a-light type="ambient" intensity="0.9"></a-light>
+    <a-light type="directional" position="0 4 2" intensity="0.6"></a-light>
+
+    <!-- Poster is sized in meters from products.js. It is placed by wall-poc-controller. -->
+    <a-plane
+      id="posterPlane"
+      visible="false"
+      position="0 1.45 -1.4"
+      width="0.6"
+      height="0.9"
+      material="shader: flat; side: double; transparent: true; src: #poster-60x90-img"
+      class="ar-poster">
+    </a-plane>
+
+    <!-- Thin border to make scale/orientation easier to judge during the test. -->
+    <a-entity id="posterBorder" visible="false"></a-entity>
+  </a-scene>
+</body>
+</html>

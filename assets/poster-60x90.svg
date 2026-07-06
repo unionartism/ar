@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="900" viewBox="0 0 600 900">
+  <defs>
+    <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#101827"/>
+      <stop offset="1" stop-color="#06b6d4"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="900" fill="url(#g)"/>
+  <rect x="28" y="28" width="544" height="844" fill="none" stroke="#fff" stroke-width="10" opacity="0.9"/>
+  <circle cx="300" cy="320" r="135" fill="#fff" opacity="0.16"/>
+  <text x="300" y="420" text-anchor="middle" font-size="72" font-family="Arial, sans-serif" font-weight="700" fill="#ffffff">60×90</text>
+  <text x="300" y="490" text-anchor="middle" font-size="34" font-family="Arial, sans-serif" fill="#ffffff" opacity="0.9">centimeters</text>
+  <text x="300" y="760" text-anchor="middle" font-size="30" font-family="Arial, sans-serif" fill="#ffffff" opacity="0.75">Wall AR Test Poster</text>
+</svg>
