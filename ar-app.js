@@ -19,18 +19,6 @@ const getSelectedProduct = () => {
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
 
-const cameraWorld = (cameraEl) => {
-  const pos = new THREE.Vector3()
-  const quat = new THREE.Quaternion()
-  const dir = new THREE.Vector3()
-
-  cameraEl.object3D.getWorldPosition(pos)
-  cameraEl.object3D.getWorldQuaternion(quat)
-  cameraEl.object3D.getWorldDirection(dir)
-
-  return {pos, quat, dir}
-}
-
 const projectedHorizontal = (v) => {
   const out = new THREE.Vector3(v.x, 0, v.z)
 
@@ -41,61 +29,23 @@ const projectedHorizontal = (v) => {
   return out.normalize()
 }
 
-const createBorder = (entity, product, scale = 1) => {
-  const parent = $('posterBorder')
-  if (!parent || !entity || !product) return
-
-  parent.innerHTML = ''
-
-  const thickness = 0.012
-  const w = product.widthM * scale
-  const h = product.heightM * scale
-
-  const parts = [
-    {
-      pos: `0 ${h / 2} 0.004`,
-      scale: `${w + thickness} ${thickness} ${thickness}`,
-    },
-    {
-      pos: `0 ${-h / 2} 0.004`,
-      scale: `${w + thickness} ${thickness} ${thickness}`,
-    },
-    {
-      pos: `${-w / 2} 0 0.004`,
-      scale: `${thickness} ${h + thickness} ${thickness}`,
-    },
-    {
-      pos: `${w / 2} 0 0.004`,
-      scale: `${thickness} ${h + thickness} ${thickness}`,
-    },
-  ]
-
-  parts.forEach((p) => {
-    const edge = document.createElement('a-box')
-    edge.setAttribute('position', p.pos)
-    edge.setAttribute('scale', p.scale)
-    edge.setAttribute('material', 'shader: flat; color: #00e7ff; opacity: 0.95')
-    parent.appendChild(edge)
-  })
-
-  parent.object3D.position.copy(entity.object3D.position)
-  parent.object3D.quaternion.copy(entity.object3D.quaternion)
-}
-
-const applyProductToPlane = (product) => {
-  const plane = $('posterPlane')
+const applyProductToPlane = (plane, product) => {
   if (!plane || !product) return
 
   plane.setAttribute('width', product.widthM)
   plane.setAttribute('height', product.heightM)
-  plane.setAttribute(
-    'material',
-    `shader: flat; side: double; transparent: true; src: #${product.imageAssetId}`
-  )
+
+  plane.setAttribute('material', {
+    shader: 'flat',
+    side: 'double',
+    transparent: true,
+    src: `#${product.imageAssetId}`,
+  })
 }
 
 const isUiTarget = (target) => {
   if (!target) return false
+
   return Boolean(
     target.closest?.(
       'button, .picker, .control-panel, .top-button, .notice, .hud'
@@ -118,12 +68,13 @@ AFRAME.registerComponent('poster-ar-app', {
     this.borderEl = $('posterBorder')
 
     this.ready = false
+    this.sceneLoaded = false
     this.placed = false
 
     this.product = getSelectedProduct()
     this.posterScale = 1
 
-    applyProductToPlane(this.product)
+    applyProductToPlane(this.posterEl, this.product)
     this.hidePoster()
 
     this.bindSceneEvents()
@@ -134,8 +85,21 @@ AFRAME.registerComponent('poster-ar-app', {
   },
 
   bindSceneEvents() {
+    this.el.addEventListener('loaded', () => {
+      this.sceneLoaded = true
+      setStatus('Scene 로드됨. 카메라 권한을 허용하세요.')
+    })
+
+    this.el.addEventListener('renderstart', () => {
+      this.sceneLoaded = true
+      if (!this.ready) {
+        setStatus('AR 렌더링 시작됨. 벽 앞에서 “이미지 배치”를 눌러보세요.')
+      }
+    })
+
     this.el.addEventListener('realityready', () => {
       this.ready = true
+      this.sceneLoaded = true
       setStatus('트래킹 시작됨. 벽 앞에서 화면 중앙을 맞춘 뒤 “이미지 배치”를 누르세요.')
     })
 
@@ -209,13 +173,17 @@ AFRAME.registerComponent('poster-ar-app', {
 
     document.querySelectorAll('.product').forEach((button) => {
       button.addEventListener('click', () => {
-        document.querySelectorAll('.product').forEach((b) => b.classList.remove('selected'))
+        document.querySelectorAll('.product').forEach((b) => {
+          b.classList.remove('selected')
+        })
+
         button.classList.add('selected')
 
         this.product = getProductById(button.dataset.productId)
         this.posterScale = 1
 
-        applyProductToPlane(this.product)
+        applyProductToPlane(this.posterEl, this.product)
+
         this.hidePoster()
         this.placed = false
 
@@ -225,9 +193,8 @@ AFRAME.registerComponent('poster-ar-app', {
 
     document.addEventListener('click', (event) => {
       if (isUiTarget(event.target)) return
-      if (!this.ready) return
+      if (!this.sceneLoaded && !this.ready) return
 
-      // 화면 아무 곳이나 탭해도 배치되게 한다.
       this.placePosterAtCenter()
     })
 
@@ -236,52 +203,68 @@ AFRAME.registerComponent('poster-ar-app', {
     })
 
     window.addEventListener('error', (event) => {
-      const message = event?.message || ''
-      if (/XR8|xrextras|landing|aframe/i.test(message)) {
-        console.error('script error:', event)
-        setStatus(`스크립트 오류: ${message}`)
-      }
+      console.error('window error:', event)
     })
   },
 
   placePosterAtCenter() {
-    if (!this.ready) {
-      setStatus('카메라/SLAM 초기화 중입니다. 잠시 후 다시 시도하세요.')
+    if (!this.cameraEl || !this.posterEl || !this.product) {
+      setStatus('AR 요소를 찾을 수 없습니다. index.html의 id를 확인하세요.')
       return
     }
 
-    if (!this.cameraEl || !this.posterEl || !this.product) return
+    if (!this.sceneLoaded && !this.ready) {
+      setStatus('아직 AR scene이 준비되지 않았습니다. 잠시 후 다시 누르세요.')
+      return
+    }
 
-    const cam = cameraWorld(this.cameraEl)
-    const forward = projectedHorizontal(cam.dir)
+    this.el.object3D.updateMatrixWorld(true)
+    this.cameraEl.object3D.updateMatrixWorld(true)
+
+    const camPos = new THREE.Vector3()
+    const camDir = new THREE.Vector3()
+
+    this.cameraEl.object3D.getWorldPosition(camPos)
+    this.cameraEl.object3D.getWorldDirection(camDir)
+
+    const forward = projectedHorizontal(camDir)
 
     const cameraHeight =
-      Number.isFinite(cam.pos.y) && Math.abs(cam.pos.y) > 0.2
-        ? cam.pos.y
+      Number.isFinite(camPos.y) && Math.abs(camPos.y) > 0.2
+        ? camPos.y
         : 1.55
 
-    const center = cam.pos
+    const center = camPos
       .clone()
       .add(forward.clone().multiplyScalar(this.data.defaultDistanceM))
 
-    // 사용자가 보통 벽을 바라보고 있을 때, 포스터 중심이 눈높이보다 약간 아래 오도록 배치.
     center.y = Math.max(0.8, Math.min(2.2, cameraHeight - 0.15))
 
-    this.posterEl.object3D.position.copy(center)
+    const posterObj = this.posterEl.object3D
 
-    // 배치 순간 카메라를 바라보도록 회전.
-    // 배치 후에는 tick에서 다시 갱신하지 않으므로 월드에 고정됨.
-    this.posterEl.object3D.lookAt(cam.pos.x, center.y, cam.pos.z)
+    posterObj.position.copy(center)
 
-    // A-Frame plane 앞면 보정
-    this.posterEl.object3D.rotateY(Math.PI)
+    // 배치 순간 카메라를 바라보게 한다.
+    posterObj.lookAt(camPos.x, center.y, camPos.z)
+
+    // a-plane 앞면 방향 보정
+    posterObj.rotateY(Math.PI)
 
     this.setScale(this.posterScale, {silent: true})
 
-    this.posterEl.setAttribute('visible', 'true')
-    this.placed = true
+    this.posterEl.setAttribute('visible', true)
+    posterObj.visible = true
 
+    this.placed = true
     this.syncBorder()
+
+    console.log('[Poster AR] placed', {
+      camera: camPos,
+      forward,
+      center,
+      product: this.product,
+      scale: this.posterScale,
+    })
 
     setStatus(
       `${this.product.name} 배치됨 | 크기 ${Math.round(this.posterScale * 100)}% | 공간에 고정됨`
@@ -320,13 +303,13 @@ AFRAME.registerComponent('poster-ar-app', {
       return
     }
 
-    const offset = new THREE.Vector3(x, y, z)
-    this.posterEl.object3D.localToWorld(offset)
+    const origin = new THREE.Vector3()
+    const target = new THREE.Vector3(x, y, z)
 
-    const origin = new THREE.Vector3(0, 0, 0)
     this.posterEl.object3D.localToWorld(origin)
+    this.posterEl.object3D.localToWorld(target)
 
-    const worldDelta = offset.sub(origin)
+    const worldDelta = target.sub(origin)
 
     this.posterEl.object3D.position.add(worldDelta)
     this.syncBorder()
@@ -337,21 +320,62 @@ AFRAME.registerComponent('poster-ar-app', {
   syncBorder() {
     if (!this.posterEl || !this.borderEl || !this.product) return
 
-    createBorder(this.posterEl, this.product, this.posterScale)
+    this.borderEl.innerHTML = ''
+
+    const thickness = 0.012
+    const w = this.product.widthM * this.posterScale
+    const h = this.product.heightM * this.posterScale
+
+    const parts = [
+      {
+        pos: `0 ${h / 2} 0.004`,
+        scale: `${w + thickness} ${thickness} ${thickness}`,
+      },
+      {
+        pos: `0 ${-h / 2} 0.004`,
+        scale: `${w + thickness} ${thickness} ${thickness}`,
+      },
+      {
+        pos: `${-w / 2} 0 0.004`,
+        scale: `${thickness} ${h + thickness} ${thickness}`,
+      },
+      {
+        pos: `${w / 2} 0 0.004`,
+        scale: `${thickness} ${h + thickness} ${thickness}`,
+      },
+    ]
+
+    parts.forEach((p) => {
+      const edge = document.createElement('a-box')
+      edge.setAttribute('position', p.pos)
+      edge.setAttribute('scale', p.scale)
+      edge.setAttribute('material', 'shader: flat; color: #00e7ff; opacity: 0.95')
+      this.borderEl.appendChild(edge)
+    })
 
     this.borderEl.object3D.position.copy(this.posterEl.object3D.position)
     this.borderEl.object3D.quaternion.copy(this.posterEl.object3D.quaternion)
-    this.borderEl.setAttribute('visible', this.posterEl.getAttribute('visible'))
+
+    const visible = this.posterEl.getAttribute('visible') === true || this.posterEl.object3D.visible
+
+    this.borderEl.setAttribute('visible', visible)
+    this.borderEl.object3D.visible = visible
   },
 
   hidePoster() {
-    if (this.posterEl) this.posterEl.setAttribute('visible', 'false')
-    if (this.borderEl) this.borderEl.setAttribute('visible', 'false')
+    if (this.posterEl) {
+      this.posterEl.setAttribute('visible', false)
+      this.posterEl.object3D.visible = false
+    }
+
+    if (this.borderEl) {
+      this.borderEl.setAttribute('visible', false)
+      this.borderEl.object3D.visible = false
+    }
   },
 
   tick() {
     // 의도적으로 비워둔다.
-    // 포스터는 배치 순간의 world position/quaternion을 유지해야 하므로
-    // 매 프레임 카메라 앞에 따라오게 갱신하지 않는다.
+    // 배치 후 포스터가 카메라를 따라오지 않도록 매 프레임 위치 갱신을 하지 않는다.
   },
 })
