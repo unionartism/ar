@@ -209,6 +209,9 @@
         let lineMesh = null;
         let imagePlane = null;
 
+        let previewLine = null;
+        let previewLineMaterial = null;
+
         let lineProgress = 0;
         let isAnimatingLine = false;
         let savedDistanceText = ""; // 거리 결과값 저장용
@@ -344,8 +347,11 @@
 
                 resultEl.innerHTML = "벽/바닥 기준점 등록 완료!";
                 setStep("toe");
+                createPreviewLine();
 
             } else if (step === "toe") {
+                removePreviewLine();
+
                 const material = new THREE.MeshStandardMaterial({ color: 0xffe600 });
                 toeMesh = new THREE.Mesh(geometry, material);
                 toeMesh.position.setFromMatrixPosition(new THREE.Matrix4().fromArray(currentHitMatrix));
@@ -402,7 +408,42 @@
             }
         }
 
+        function createPreviewLine() {
+            removePreviewLine();
+
+            const geometry = new THREE.BufferGeometry().setFromPoints([
+                wallFloorMesh.position,
+                wallFloorMesh.position
+            ]);
+
+            previewLineMaterial = new THREE.LineDashedMaterial({
+                color: 0x00ff66,
+                dashSize: 0.08,
+                gapSize: 0.045,
+                linewidth: 2
+            });
+
+            previewLine = new THREE.Line(geometry, previewLineMaterial);
+            previewLine.computeLineDistances();
+            previewLine.visible = false;
+            scene.add(previewLine);
+        }
+
+        function removePreviewLine() {
+            if (!previewLine) return;
+
+            scene.remove(previewLine);
+
+            if (previewLine.geometry) previewLine.geometry.dispose();
+            if (previewLine.material) previewLine.material.dispose();
+
+            previewLine = null;
+            previewLineMaterial = null;
+        }
+
         function resetMeasurement() {
+            removePreviewLine();
+
             if (wallFloorMesh) { scene.remove(wallFloorMesh); wallFloorMesh = null; }
             if (toeMesh) { scene.remove(toeMesh); toeMesh = null; }
             if (lineMesh) { scene.remove(lineMesh); lineMesh = null; }
@@ -476,6 +517,30 @@
                             resultEl.textContent = "평면을 탐색 중입니다...";
                         }
                     }
+                }
+            }
+
+            if (step === "toe" && wallFloorMesh && previewLine) {
+                if (currentHitMatrix) {
+                    const currentTargetPosition = new THREE.Vector3();
+                    currentTargetPosition.setFromMatrixPosition(
+                        new THREE.Matrix4().fromArray(currentHitMatrix)
+                    );
+
+                    previewLine.geometry.setFromPoints([
+                        wallFloorMesh.position,
+                        currentTargetPosition
+                    ]);
+
+                    previewLine.computeLineDistances();
+                    previewLine.visible = true;
+
+                    // 점선이 앞으로 흐르는 듯한 효과
+                    if (previewLineMaterial) {
+                        previewLineMaterial.dashOffset -= 0.01;
+                    }
+                } else {
+                    previewLine.visible = false;
                 }
             }
 
