@@ -315,7 +315,21 @@
         function onActionTriggered() {
             // 3단계(이미지 배치)일 때는 실시간 hitMatrix 맵핑이 안 되어 있어도 패스하도록 방어 조건 수정
             if (!currentHitMatrix && step !== "placeImage") {
-                alert("공간 분석 대기 중입니다. 평평한 곳을 비춰주세요.");
+                resultEl.innerHTML = `
+        <span style="color:#ffcc00; font-weight:800;">
+            아직 평면을 인식하지 못했습니다.
+        </span><br>
+        <span style="font-size:0.95em;">
+            벽과 바닥이 만나는 부분을 천천히 비춰주세요.
+        </span>
+    `;
+
+                actionBtn.style.opacity = "0.75";
+
+                setTimeout(() => {
+                    actionBtn.style.opacity = "1";
+                }, 500);
+
                 return;
             }
 
