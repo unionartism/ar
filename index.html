@@ -114,6 +114,7 @@
             pointer-events: none;
             border: 2px solid #00ff66;
             border-radius: 50%;
+            display: none;
         }
 
         #crosshair::before,
@@ -237,29 +238,35 @@
             container.appendChild(renderer.domElement);
 
             const arButton = ARButton.createButton(renderer, {
-    requiredFeatures: ['hit-test'],
-    optionalFeatures: ['dom-overlay'],
-    domOverlay: { root: document.body }
-});
-document.body.appendChild(arButton);
+                requiredFeatures: ['hit-test'],
+                optionalFeatures: ['dom-overlay'],
+                domOverlay: { root: document.body }
+            });
+            document.body.appendChild(arButton);
 
-renderer.xr.addEventListener('sessionstart', () => {
-    // AR 시작 후 Three.js가 버튼을 STOP AR로 바꾸기 때문에 숨김 처리
-    arButton.style.display = 'none';
-    arButton.style.pointerEvents = 'none';
+            renderer.xr.addEventListener('sessionstart', () => {
+                // AR 시작 후 Three.js가 버튼을 STOP AR로 바꾸기 때문에 숨김 처리
+                arButton.style.display = 'none';
+                arButton.style.pointerEvents = 'none';
 
-    uiBottom.style.display = 'block';
-    setStep("wallFloor");
-});
+                // AR 시작 후에만 조준점 표시
+                crosshair.style.display = 'block';
 
-renderer.xr.addEventListener('sessionend', () => {
-    // AR 세션이 종료되면 다시 시작할 수 있도록 START AR 버튼 복구
-    arButton.style.display = '';
-    arButton.style.pointerEvents = '';
+                uiBottom.style.display = 'block';
+                setStep("wallFloor");
+            });
 
-    uiBottom.style.display = 'none';
-    resetMeasurement();
-});
+            renderer.xr.addEventListener('sessionend', () => {
+                // AR 세션이 종료되면 다시 시작할 수 있도록 START AR 버튼 복구
+                arButton.style.display = '';
+                arButton.style.pointerEvents = '';
+
+                // AR 종료 시 조준점 숨김
+                crosshair.style.display = 'none';
+
+                uiBottom.style.display = 'none';
+                resetMeasurement();
+            });
 
             renderer.setAnimationLoop(render);
 
@@ -438,7 +445,7 @@ renderer.xr.addEventListener('sessionend', () => {
                     if (hitTestResults.length > 0) {
                         const hit = hitTestResults[0];
                         currentHitMatrix = hit.getPose(referenceSpace).transform.matrix;
-                        
+
                         // [수정] 3단계(placeImage) 상태일 때는 센서 성공 여부 문구로 UI를 덮어쓰지 않고 안내 고정
                         if (step !== "done" && step !== "placeImage") {
                             resultEl.textContent = "공간 인식 성공! 확정 버튼을 누르세요.";
@@ -447,7 +454,7 @@ renderer.xr.addEventListener('sessionend', () => {
                         }
                     } else {
                         currentHitMatrix = null;
-                        
+
                         // [수정] 3단계일 때는 센서가 실패하더라도 '평면 탐색 중' 문구를 띄우지 않고 버튼 클릭 유도
                         if (step === "placeImage") {
                             resultEl.innerHTML = savedDistanceText + "<br><span style='color:#ff00ff;'>원하는 벽면 높이(정면)를 바라보고 버튼을 누르세요!</span>";
