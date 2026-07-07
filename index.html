@@ -237,20 +237,29 @@
             container.appendChild(renderer.domElement);
 
             const arButton = ARButton.createButton(renderer, {
-                requiredFeatures: ['hit-test'],
-                optionalFeatures: ['dom-overlay'],
-                domOverlay: { root: document.body }
-            });
-            document.body.appendChild(arButton);
+    requiredFeatures: ['hit-test'],
+    optionalFeatures: ['dom-overlay'],
+    domOverlay: { root: document.body }
+});
+document.body.appendChild(arButton);
 
-            renderer.xr.addEventListener('sessionstart', () => {
-                uiBottom.style.display = 'block';
-                setStep("wallFloor");
-            });
-            renderer.xr.addEventListener('sessionend', () => {
-                uiBottom.style.display = 'none';
-                resetMeasurement();
-            });
+renderer.xr.addEventListener('sessionstart', () => {
+    // AR 시작 후 Three.js가 버튼을 STOP AR로 바꾸기 때문에 숨김 처리
+    arButton.style.display = 'none';
+    arButton.style.pointerEvents = 'none';
+
+    uiBottom.style.display = 'block';
+    setStep("wallFloor");
+});
+
+renderer.xr.addEventListener('sessionend', () => {
+    // AR 세션이 종료되면 다시 시작할 수 있도록 START AR 버튼 복구
+    arButton.style.display = '';
+    arButton.style.pointerEvents = '';
+
+    uiBottom.style.display = 'none';
+    resetMeasurement();
+});
 
             renderer.setAnimationLoop(render);
 
