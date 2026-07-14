@@ -54,15 +54,15 @@
         }
 
         #step-title {
+            margin-top: 10px;
             font-size: 18px;
+            line-height: 1.25;
             font-weight: 800;
             color: #00ff66;
-            margin-bottom: 5px;
         }
 
         #product-name {
             max-width: 72vw;
-            margin-top: 4px;
             font-size: 12px;
             line-height: 1.4;
             opacity: 0.8;
@@ -93,12 +93,30 @@
         }
 
         #guide-text {
-            max-width: min(76vw, 520px);
-            margin-top: 8px;
+            position: fixed;
+            top: calc(50% + 58px);
+            left: 50%;
+            z-index: 7;
+            width: min(82vw, 520px);
+            margin: 0;
+            transform: translateX(-50%);
             font-size: 14px;
-            line-height: 1.4;
-            opacity: 0.9;
+            line-height: 1.45;
+            font-weight: 700;
+            text-align: center;
+            color: #fff;
+            opacity: 0.92;
             word-break: keep-all;
+            pointer-events: none;
+            transition:
+                top 0.25s ease,
+                opacity 0.2s ease,
+                transform 0.25s ease;
+        }
+
+        /* 스캔 큐브 아래에서는 큐브 높이만큼 안내 문구를 더 내려준다. */
+        #guide-text.mode-scan {
+            top: calc(50% + 82px);
         }
 
         #close-btn {
@@ -259,12 +277,12 @@
             top: 50%;
             left: 50%;
             z-index: 6;
-            width: min(78vw, 260px);
+            width: 116px;
+            height: 116px;
             transform: translate(-50%, -50%) scale(0.9);
             display: flex;
-            flex-direction: column;
             align-items: center;
-            gap: 14px;
+            justify-content: center;
             opacity: 0;
             visibility: hidden;
             pointer-events: none;
@@ -366,42 +384,6 @@
             transform: rotate(45deg);
         }
 
-        .scan-motion {
-            display: grid;
-            grid-template-columns: 30px minmax(0, 1fr) 30px;
-            align-items: center;
-            width: 100%;
-            padding: 10px 12px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 999px;
-            background: rgba(0, 0, 0, 0.55);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
-        }
-
-        .scan-motion-text {
-            font-size: 13px;
-            line-height: 1.4;
-            font-weight: 800;
-            text-align: center;
-            color: #fff;
-            word-break: keep-all;
-        }
-
-        .scan-arrow {
-            font-size: 25px;
-            line-height: 1;
-            font-weight: 900;
-            color: var(--scan-color);
-            text-align: center;
-            animation: scan-arrow-pulse 1.35s ease-in-out infinite;
-        }
-
-        .scan-arrow.right {
-            animation-delay: 0.18s;
-        }
-
         @keyframes scan-cube-rotate {
             from {
                 transform: rotateX(-20deg) rotateY(0deg);
@@ -434,25 +416,10 @@
             }
         }
 
-        @keyframes scan-arrow-pulse {
-
-            0%,
-            100% {
-                opacity: 0.35;
-                transform: translateX(0);
-            }
-
-            50% {
-                opacity: 1;
-                transform: translateX(3px);
-            }
-        }
-
         @media (prefers-reduced-motion: reduce) {
 
             .scan-cube,
-            .scan-orbit,
-            .scan-arrow {
+            .scan-orbit {
                 animation-duration: 12s;
             }
         }
@@ -562,14 +529,10 @@
                 <span class="scan-cube-face bottom"></span>
             </div>
         </div>
-        <div class="scan-motion">
-            <span class="scan-arrow left" aria-hidden="true">‹</span>
-            <span class="scan-motion-text">
-                휴대폰을 천천히 움직여<br>
-                공간을 스캔하세요
-            </span>
-            <span class="scan-arrow right" aria-hidden="true">›</span>
-        </div>
+    </div>
+
+    <div id="guide-text" aria-live="polite">
+        시작하기 버튼을 눌러 AR을 실행해 주세요.
     </div>
 
     <div id="unsupported-message">
@@ -587,9 +550,8 @@
         <div id="top-panel">
             <div id="top-row">
                 <div>
-                    <div id="step-title">AR 준비</div>
                     <div id="product-name"></div>
-                    <div id="guide-text">시작하기 버튼을 눌러 AR을 실행해 주세요.</div>
+                    <div id="step-title">AR 준비</div>
                 </div>
                 <button type="button" id="close-btn">닫기</button>
             </div>
@@ -1115,6 +1077,44 @@
             guideText.textContent = text;
         }
 
+        function updateGuideForCurrentState() {
+            const isPresenting = renderer?.xr?.isPresenting === true;
+            const isScanning =
+                isPresenting &&
+                (step === 'wallFloor' || step === 'toe') &&
+                targetingMode === 'scan';
+
+            guideText.classList.toggle('mode-scan', isScanning);
+
+            if (!isPresenting || step === 'ready') {
+                setGuideText('시작하기 버튼을 눌러 AR을 실행해 주세요.');
+                return;
+            }
+
+            if (isScanning) {
+                setGuideText('휴대폰을 천천히 움직여 공간을 스캔하세요.');
+                return;
+            }
+
+            if (step === 'wallFloor') {
+                setGuideText(
+                    '벽면과 바닥이 만나는 모서리의 바닥 지점을 조준점에 맞추고 버튼을 누르세요.'
+                );
+            } else if (step === 'toe') {
+                setGuideText(
+                    '1단계 기준점에서 벽과 직각 방향으로 한 걸음 물러선 사용자의 발끝을 조준점에 맞추고 버튼을 누르세요.'
+                );
+            } else if (step === 'placeImage') {
+                setGuideText(
+                    '기준점의 수직 위를 화면 중앙에 맞춘 뒤, 휴대폰을 위아래로 기울여 원하는 높이에서 버튼을 누르세요.'
+                );
+            } else if (step === 'done') {
+                setGuideText(
+                    '줄자와 상품 이미지가 고정되었습니다. 자유롭게 이동하며 확인해 보세요.'
+                );
+            }
+        }
+
         function setCrosshairColor(color) {
             crosshair.style.setProperty('--crosshair-color', color);
             scanGuide.style.setProperty('--scan-color', color);
@@ -1137,8 +1137,6 @@
         }
 
         function setTargetingMode(nextMode) {
-            if (targetingMode === nextMode) return;
-
             targetingMode = nextMode;
 
             const showScan = nextMode === 'scan';
@@ -1152,6 +1150,8 @@
             crosshair.classList.toggle('is-visible', showCrosshair);
             crosshair.classList.toggle('is-hold', nextMode === 'hold');
             crosshair.setAttribute('aria-hidden', showCrosshair ? 'false' : 'true');
+
+            updateGuideForCurrentState();
         }
 
         function syncTargetingUIForStep() {
@@ -1219,7 +1219,6 @@
                 stepTitle.style.color = '#00d4ff';
                 setCrosshairColor('#00d4ff');
 
-                setGuideText('벽면과 바닥이 만나는 모서리의 바닥 지점을 조준점에 맞추고 버튼을 누르세요.');
                 actionBtn.textContent = '벽/바닥선 확정';
                 actionBtn.style.background = '#00d4ff';
                 actionBtn.style.color = '#fff';
@@ -1230,7 +1229,6 @@
                 stepTitle.style.color = '#ffe600';
                 setCrosshairColor('#ffe600');
 
-                setGuideText('1단계 기준점에서 벽과 직각 방향으로 한 걸음 물러선 사용자의 발끝을 조준점에 맞추고 버튼을 누르세요.');
                 actionBtn.textContent = '발끝 확정';
                 actionBtn.style.background = '#ffe600';
                 actionBtn.style.color = '#000';
@@ -1244,7 +1242,6 @@
                 // 3단계에서는 벽면 hit-test를 요구하지 않는다.
                 // 기준점 수직 위를 화면 중앙에 맞춘 상태에서 휴대폰 기울기로 높이를 정한다.
                 currentHitMatrix = null;
-                setGuideText('기준점의 수직 위를 화면 중앙에 맞춘 뒤, 휴대폰을 위아래로 기울여 원하는 높이에서 버튼을 누르세요.');
                 actionBtn.textContent = '여기에 이미지 부착';
                 actionBtn.style.background = '#ff00ff';
                 actionBtn.style.color = '#fff';
@@ -1255,7 +1252,6 @@
                 stepTitle.style.color = '#00ff66';
                 setCrosshairColor('#fff');
 
-                setGuideText('줄자와 상품 이미지가 고정되었습니다. 자유롭게 이동하며 확인해 보세요.');
                 actionBtn.textContent = '완료됨';
                 actionBtn.style.background = '#374151';
                 actionBtn.style.color = '#fff';
@@ -1759,7 +1755,8 @@
                 stepTitle.textContent = 'AR 준비';
                 stepTitle.style.color = '#00ff66';
                 setCrosshairColor('#00ff66');
-                setGuideText('시작하기 버튼을 눌러 AR을 실행해 주세요.');
+                setTargetingMode('hidden');
+                updateGuideForCurrentState();
             }
         }
 
