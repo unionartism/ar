@@ -365,6 +365,7 @@
         let renderer = null;
         let arButton = null;
         let arButtonLabelObserver = null;
+        let activeXRSession = null;
 
         let hitTestSource = null;
         let hitTestSourceRequested = false;
@@ -377,10 +378,50 @@
         let step = 'ready';
         let currentHitMatrix = null;
 
+        // 모든 측정 오브젝트는 이 루트 아래에 배치한다.
+        // Anchor가 지원되면 필터링한 Anchor pose로 루트 행렬을 갱신하고,
+        // 미지원 환경에서는 reference-space reset 보정 행렬을 적용한다.
+        let contentRoot = null;
         let wallFloorMesh = null;
         let toeMesh = null;
         let lineMesh = null;
         let productDisplayGroup = null;
+
+        let worldAnchor = null;
+        let anchorFeatureEnabled = false;
+        let anchorState = 'idle';
+        let anchorRequestToken = 0;
+        let pendingWallFloorSelection = false;
+        let pendingWallFloorWorldMatrix = null;
+        let anchorPoseMissingFrames = 0;
+        let anchorAwaitingPoseFrames = 0;
+        const lastValidContentRootMatrix = new THREE.Matrix4();
+        let hasLastValidContentRootMatrix = false;
+
+        // 2단계가 끝나면 기준점·발끝·거리선의 로컬 좌표는 더 이상
+        // 변경하지 않는다. 실제 공간 고정은 Anchor를 삭제하지 않고 유지해
+        // 담당하며, Anchor pose에는 흔들림 억제 필터를 적용한다.
+        let spatialLockFinalized = false;
+
+        const filteredAnchorPosition = new THREE.Vector3();
+        const filteredAnchorQuaternion = new THREE.Quaternion();
+        const filteredAnchorScale = new THREE.Vector3(1, 1, 1);
+        let hasFilteredAnchorPose = false;
+
+        const anchorJumpCandidatePosition = new THREE.Vector3();
+        const anchorJumpCandidateQuaternion = new THREE.Quaternion();
+        let hasAnchorJumpCandidate = false;
+        let anchorJumpCandidateFrames = 0;
+        let anchorTrackingHoldFrames = 0;
+
+        let currentViewerPoseAvailable = false;
+        let currentViewerPoseEmulated = false;
+
+        let trackedReferenceSpace = null;
+        let referenceSpaceResetHandler = null;
+        let sessionVisibilityHandler = null;
+        let lastViewerPoseAvailable = true;
+        let lastViewerPoseEmulated = null;
 
         // Three.js가 제공하는 실제 공간 깊이 메시를 장면에 추가해
         // 가까운 현실 물체가 가상 상품을 가리도록 한다.
@@ -417,7 +458,32 @@
         const MIN_CENTER_RAY_WALL_ALIGNMENT = 0.08;
         const MAX_CENTER_RAY_DISTANCE_M = 12;
         const MAX_PLACEMENT_CENTER_HEIGHT_ABOVE_FLOOR_M = 4.5;
-        const WALL_FRONT_OFFSET_M = 0.01;
+
+        // 깊이 오클루전은 기기별 깊이 오차 때문에 전체 콘텐츠가 순간적으로
+        // 가려지는 현상을 만들 수 있어 기본값을 끈다. 필요하면 URL에 depth=1.
+        const ENABLE_DEPTH_OCCLUSION = params.get('depth') === '1';
+
+        // 프레임 뒷면까지 실제 벽 앞에 남도록 본체 깊이보다 조금 더 띄운다.
+        const WALL_FRONT_OFFSET_M = FRAME_DEPTH_M + 0.005;
+
+        const ANCHOR_AWAITING_POSE_LIMIT_FRAMES = 300;
+        const ANCHOR_CREATION_TIMEOUT_MS = 8000;
+        const ANCHOR_MISSING_WARNING_FRAMES = 90;
+
+        // Anchor pose 안정화 필터. 거리선의 로컬 좌표는 고정하고,
+        // 실제 공간에 대한 루트 pose의 작은 잡음과 순간 점프만 억제한다.
+        const ANCHOR_POSITION_DEADBAND_M = 0.010;
+        const ANCHOR_ROTATION_DEADBAND_RAD = THREE.MathUtils.degToRad(0.5);
+        const ANCHOR_LARGE_JUMP_POSITION_M = 0.18;
+        const ANCHOR_LARGE_JUMP_ROTATION_RAD = THREE.MathUtils.degToRad(10);
+        const ANCHOR_JUMP_CONFIRM_FRAMES = 12;
+        const ANCHOR_JUMP_POSITION_TOLERANCE_M = 0.05;
+        const ANCHOR_JUMP_ROTATION_TOLERANCE_RAD = THREE.MathUtils.degToRad(4);
+        const ANCHOR_POSITION_SMOOTHING = 0.18;
+        const ANCHOR_ROTATION_SMOOTHING = 0.16;
+        const ANCHOR_MAX_POSITION_STEP_M = 0.018;
+        const ANCHOR_MAX_ROTATION_STEP_RAD = THREE.MathUtils.degToRad(1.2);
+        const ANCHOR_TRACKING_HOLD_WARNING_FRAMES = 90;
 
         init().catch((error) => {
             console.error('[AR] 초기화 실패:', error);
@@ -562,6 +628,13 @@
             document.body.appendChild(container);
 
             scene = new THREE.Scene();
+
+            contentRoot = new THREE.Group();
+            contentRoot.name = 'world-locked-content-root';
+            contentRoot.matrixAutoUpdate = false;
+            contentRoot.matrix.identity();
+            scene.add(contentRoot);
+
             camera = new THREE.PerspectiveCamera(
                 70,
                 window.innerWidth / window.innerHeight,
@@ -580,20 +653,31 @@
             renderer.xr.enabled = true;
             container.appendChild(renderer.domElement);
 
-            arButton = ARButton.createButton(renderer, {
+            const optionalFeatures = [
+                'dom-overlay',
+                'anchors'
+            ];
+
+            if (ENABLE_DEPTH_OCCLUSION) {
+                optionalFeatures.push('depth-sensing');
+            }
+
+            const arSessionOptions = {
                 requiredFeatures: ['hit-test'],
-                optionalFeatures: [
-                    'dom-overlay',
-                    'depth-sensing'
-                ],
-                depthSensing: {
-                    usagePreference: ['gpu-optimized'],
-                    dataFormatPreference: ['float32', 'luminance-alpha']
-                },
+                optionalFeatures,
                 domOverlay: {
                     root: document.body
                 }
-            });
+            };
+
+            if (ENABLE_DEPTH_OCCLUSION) {
+                arSessionOptions.depthSensing = {
+                    usagePreference: ['gpu-optimized'],
+                    dataFormatPreference: ['float32', 'luminance-alpha']
+                };
+            }
+
+            arButton = ARButton.createButton(renderer, arSessionOptions);
 
             arButton.style.visibility = 'hidden';
             document.body.appendChild(arButton);
@@ -655,6 +739,7 @@
             closeRequested = false;
             currentHitMatrix = null;
             clearHitTestSource();
+            detachReferenceSpaceListener();
 
             arButton.style.setProperty('display', 'none', 'important');
             arButton.style.setProperty('visibility', 'hidden', 'important');
@@ -663,16 +748,44 @@
             crosshair.style.display = 'block';
             uiBottom.style.display = 'block';
 
-            depthSensingState = 'pending';
-
             const session = renderer.xr.getSession();
+            activeXRSession = session;
             const enabledFeatures = session?.enabledFeatures
                 ? Array.from(session.enabledFeatures)
                 : [];
 
-            if (enabledFeatures.length > 0 && !enabledFeatures.includes('depth-sensing')) {
-                depthSensingState = 'unsupported';
-                console.info('[AR] 깊이 오클루전을 지원하지 않아 기본 AR로 실행합니다.');
+            const anchorApiPresent =
+                typeof globalThis.XRHitTestResult !== 'undefined' &&
+                typeof globalThis.XRHitTestResult.prototype?.createAnchor === 'function';
+
+            // 일부 구현은 enabledFeatures를 노출하지 않으므로 API 존재 여부도
+            // 함께 확인한다. 실제 생성 실패 시 자동으로 폴백한다.
+            anchorFeatureEnabled =
+                enabledFeatures.includes('anchors') ||
+                (enabledFeatures.length === 0 && anchorApiPresent);
+
+            console.info(
+                anchorFeatureEnabled
+                    ? '[AR] WebXR Anchor 사용을 시도합니다.'
+                    : '[AR] Anchor 미지원: 기준 공간 reset 보정 폴백을 사용합니다.'
+            );
+
+            if (ENABLE_DEPTH_OCCLUSION) {
+                depthSensingState = 'pending';
+
+                if (enabledFeatures.length > 0 && !enabledFeatures.includes('depth-sensing')) {
+                    depthSensingState = 'unsupported';
+                    console.info('[AR] 깊이 오클루전을 지원하지 않아 기본 AR로 실행합니다.');
+                }
+            } else {
+                depthSensingState = 'disabled';
+            }
+
+            if (session) {
+                sessionVisibilityHandler = () => {
+                    console.info('[AR] 세션 가시성 변경:', session.visibilityState);
+                };
+                session.addEventListener('visibilitychange', sessionVisibilityHandler);
             }
 
             resetMeasurement();
@@ -694,6 +807,13 @@
             crosshair.style.display = 'none';
             uiBottom.style.display = 'none';
 
+            if (activeXRSession && sessionVisibilityHandler) {
+                activeXRSession.removeEventListener('visibilitychange', sessionVisibilityHandler);
+            }
+            activeXRSession = null;
+            sessionVisibilityHandler = null;
+
+            detachReferenceSpaceListener();
             clearHitTestSource();
             removeDepthOcclusionMesh();
             depthSensingState = 'idle';
@@ -768,7 +888,6 @@
 
         function onActionTriggered() {
             // 1·2단계만 실제 바닥 hit-test가 필요하다.
-            // 3단계는 아래의 화면 중앙 광선 계산으로 배치 높이를 구한다.
             const hitRequiredSteps = ['wallFloor', 'toe'];
 
             if (hitRequiredSteps.includes(step) && !currentHitMatrix) {
@@ -818,37 +937,39 @@
             }
 
             if (step === 'wallFloor') {
-                const geometry = new THREE.SphereGeometry(0.02, 24, 24);
-                const material = new THREE.MeshBasicMaterial({
-                    color: 0x00d4ff
-                });
-
-                wallFloorMesh = new THREE.Mesh(geometry, material);
-                wallFloorMesh.position.setFromMatrixPosition(hitMatrix);
-                wallFloorMesh.scale.setScalar(0);
-                scene.add(wallFloorMesh);
-
-                resultEl.textContent = '벽/바닥 기준점 등록 완료!';
-                setStep('toe');
+                // XRAnchor 생성은 활성 XRFrame 안에서만 가능하다.
+                // 클릭 시 요청만 예약하고 다음 updateHitTest()에서 생성한다.
+                pendingWallFloorSelection = true;
+                actionBtn.disabled = true;
+                actionBtn.style.opacity = '0.75';
+                resultEl.innerHTML = `
+                    <span style="color:#00d4ff; font-weight:800;">
+                        기준점을 실제 공간에 고정하는 중입니다...
+                    </span>
+                `;
+                resultMessageLockUntil = Number.POSITIVE_INFINITY;
 
             } else if (step === 'toe') {
+                const referencePosition = new THREE.Vector3()
+                    .setFromMatrixPosition(hitMatrix);
+                const localPosition = referencePositionToContentLocal(referencePosition);
+
                 const geometry = new THREE.SphereGeometry(0.02, 24, 24);
                 const material = new THREE.MeshBasicMaterial({
-                    color: 0xffe600
+                    color: 0xffe600,
+                    depthTest: false
                 });
 
                 toeMesh = new THREE.Mesh(geometry, material);
-                toeMesh.position.setFromMatrixPosition(hitMatrix);
+                toeMesh.position.copy(localPosition);
                 toeMesh.scale.setScalar(0);
-                scene.add(toeMesh);
+                toeMesh.renderOrder = 100;
+                contentRoot.add(toeMesh);
 
-                // 벽과 발끝 사이의 바닥 수평 거리만 계산한다.
                 const dx = toeMesh.position.x - wallFloorMesh.position.x;
                 const dz = toeMesh.position.z - wallFloorMesh.position.z;
                 const distanceInMeters = Math.hypot(dx, dz);
 
-                // 두 점이 너무 가까우면 가상 벽면의 방향을 안정적으로
-                // 계산할 수 없으므로 발끝을 다시 등록하게 한다.
                 if (distanceInMeters < MIN_WALL_REFERENCE_DISTANCE_M) {
                     disposeObject(toeMesh);
                     toeMesh = null;
@@ -875,9 +996,14 @@
                 savedDistanceText =
                     `<span style="font-size:1.2em; color:#ffe600; font-weight:bold;">★ 벽 ↔ 발끝 거리: ${distanceInCm}cm</span>`;
 
+                // 벽 기준점과 발끝의 로컬 좌표를 최종 확정한다.
+                // Anchor는 삭제하지 않고 유지하며, 이후에는 필터링된
+                // Anchor pose만 contentRoot에 적용한다.
+                finalizeSpatialLock();
+
                 resultEl.innerHTML =
                     savedDistanceText +
-                    '<br><span style="color:#ff00ff;">기준점의 수직 위를 화면 중앙에 맞추고 휴대폰을 위아래로 기울여 높이를 정해 주세요.</span>';
+                    '<br><span style="color:#ff00ff;">측정 기준을 고정했습니다. 기준점의 수직 위를 화면 중앙에 맞추고 휴대폰을 위아래로 기울여 높이를 정해 주세요.</span>';
 
                 setStep('placeImage');
 
@@ -911,7 +1037,7 @@
             lineMesh = new Line2(lineGeometry, lineMaterial);
             lineMesh.frustumCulled = false;
             lineMesh.computeLineDistances();
-            scene.add(lineMesh);
+            contentRoot.add(lineMesh);
         }
 
         function getScreenCenterWallPlacement() {
@@ -949,6 +1075,12 @@
 
             xrCamera.getWorldPosition(cameraPosition);
             xrCamera.getWorldDirection(cameraDirection);
+
+            // 카메라의 월드 좌표를 Anchor 루트의 로컬 좌표로 변환한다.
+            // 이후 계산과 상품 배치를 모두 같은 좌표계에서 수행한다.
+            const rootInverse = getContentRootWorldInverse();
+            cameraPosition.applyMatrix4(rootInverse);
+            cameraDirection.transformDirection(rootInverse);
 
             if (cameraDirection.lengthSq() < 0.000001) {
                 return {
@@ -1135,7 +1267,7 @@
 
                     const imageMaterial = new THREE.MeshBasicMaterial({
                         map: texture,
-                        side: THREE.FrontSide,
+                        side: THREE.DoubleSide,
                         transparent: true,
                         toneMapped: false
                     });
@@ -1160,7 +1292,7 @@
                         .copy(placementPosition)
                         .addScaledVector(wallNormal, WALL_FRONT_OFFSET_M);
 
-                    scene.add(productDisplayGroup);
+                    contentRoot.add(productDisplayGroup);
 
                     resultEl.innerHTML =
                         savedDistanceText +
@@ -1197,10 +1329,14 @@
         }
 
         function resetMeasurement() {
-            // 이전 이미지 로딩 콜백을 무효화한다.
             productLoadToken++;
+            anchorRequestToken++;
             isLoadingProductImage = false;
             resultMessageLockUntil = 0;
+            pendingWallFloorSelection = false;
+            pendingWallFloorWorldMatrix = null;
+
+            releaseWorldAnchor();
 
             disposeObject(wallFloorMesh);
             disposeObject(toeMesh);
@@ -1211,6 +1347,19 @@
             toeMesh = null;
             lineMesh = null;
             productDisplayGroup = null;
+
+            resetContentRootMatrix();
+
+            anchorState = 'idle';
+            anchorPoseMissingFrames = 0;
+            anchorAwaitingPoseFrames = 0;
+            hasLastValidContentRootMatrix = false;
+            lastValidContentRootMatrix.identity();
+
+            spatialLockFinalized = false;
+            resetAnchorPoseFilter();
+            currentViewerPoseAvailable = false;
+            currentViewerPoseEmulated = false;
 
             isAnimatingLine = false;
             lineProgress = 0;
@@ -1234,9 +1383,9 @@
         }
 
         function disposeObject(object) {
-            if (!object || !scene) return;
+            if (!object) return;
 
-            scene.remove(object);
+            object.removeFromParent();
 
             object.traverse((child) => {
                 if (child.geometry) {
@@ -1261,6 +1410,603 @@
             }
 
             material.dispose();
+        }
+
+        function resetContentRootMatrix() {
+            if (!contentRoot) return;
+
+            contentRoot.matrix.identity();
+            contentRoot.matrixWorldNeedsUpdate = true;
+            contentRoot.updateMatrixWorld(true);
+        }
+
+        function setContentRootMatrix(matrix) {
+            if (!contentRoot) return;
+
+            contentRoot.matrix.copy(matrix);
+            contentRoot.matrixWorldNeedsUpdate = true;
+            contentRoot.updateMatrixWorld(true);
+        }
+
+        function resetAnchorPoseFilter() {
+            filteredAnchorPosition.set(0, 0, 0);
+            filteredAnchorQuaternion.identity();
+            filteredAnchorScale.set(1, 1, 1);
+            hasFilteredAnchorPose = false;
+
+            anchorJumpCandidatePosition.set(0, 0, 0);
+            anchorJumpCandidateQuaternion.identity();
+            hasAnchorJumpCandidate = false;
+            anchorJumpCandidateFrames = 0;
+            anchorTrackingHoldFrames = 0;
+        }
+
+        function clearAnchorJumpCandidate() {
+            hasAnchorJumpCandidate = false;
+            anchorJumpCandidateFrames = 0;
+        }
+
+        function composeFilteredAnchorMatrix(target = new THREE.Matrix4()) {
+            return target.compose(
+                filteredAnchorPosition,
+                filteredAnchorQuaternion,
+                filteredAnchorScale
+            );
+        }
+
+        function setFilteredAnchorPoseFromMatrix(matrix) {
+            matrix.decompose(
+                filteredAnchorPosition,
+                filteredAnchorQuaternion,
+                filteredAnchorScale
+            );
+
+            filteredAnchorQuaternion.normalize();
+            filteredAnchorScale.set(1, 1, 1);
+            hasFilteredAnchorPose = true;
+
+            const filteredMatrix = composeFilteredAnchorMatrix();
+            setContentRootMatrix(filteredMatrix);
+            lastValidContentRootMatrix.copy(filteredMatrix);
+            hasLastValidContentRootMatrix = true;
+        }
+
+        function finalizeSpatialLock() {
+            if (!contentRoot || spatialLockFinalized) return;
+
+            // 기준점·발끝·거리선은 contentRoot 로컬 좌표로 이미 저장됐다.
+            // 이 시점부터 해당 로컬 좌표는 변경하지 않지만, 실제 공간과의
+            // 연결을 유지하기 위해 Anchor 자체는 세션 종료까지 보존한다.
+            spatialLockFinalized = true;
+            isAnimatingLine = false;
+
+            if (lineMesh && wallFloorMesh && toeMesh) {
+                lineProgress = 1;
+                lineMesh.geometry.setPositions([
+                    wallFloorMesh.position.x,
+                    wallFloorMesh.position.y,
+                    wallFloorMesh.position.z,
+                    toeMesh.position.x,
+                    toeMesh.position.y,
+                    toeMesh.position.z
+                ]);
+                lineMesh.computeLineDistances();
+            }
+
+            console.info(
+                worldAnchor
+                    ? '[AR] 2단계 완료: 로컬 측정 좌표를 고정하고 Anchor 추적을 유지합니다.'
+                    : '[AR] 2단계 완료: 로컬 측정 좌표를 고정하고 reference-space 폴백을 유지합니다.'
+            );
+        }
+
+        function getContentRootWorldInverse() {
+            if (!contentRoot) {
+                return new THREE.Matrix4();
+            }
+
+            contentRoot.updateMatrixWorld(true);
+            return new THREE.Matrix4().copy(contentRoot.matrixWorld).invert();
+        }
+
+        function referencePositionToContentLocal(referencePosition) {
+            return referencePosition.clone().applyMatrix4(
+                getContentRootWorldInverse()
+            );
+        }
+
+        function createWallFloorMarker(localPosition) {
+            if (wallFloorMesh) return;
+
+            const geometry = new THREE.SphereGeometry(0.02, 24, 24);
+            const material = new THREE.MeshBasicMaterial({
+                color: 0x00d4ff,
+                depthTest: false
+            });
+
+            wallFloorMesh = new THREE.Mesh(geometry, material);
+            wallFloorMesh.position.copy(localPosition);
+            wallFloorMesh.scale.setScalar(0);
+            wallFloorMesh.renderOrder = 100;
+            contentRoot.add(wallFloorMesh);
+
+            actionBtn.disabled = false;
+            actionBtn.style.opacity = '1';
+            resultMessageLockUntil = 0;
+            resultEl.textContent = anchorState === 'active'
+                ? '벽/바닥 기준점을 실제 공간에 고정했습니다!'
+                : '벽/바닥 기준점을 등록했습니다. Anchor 미지원 환경에서는 좌표 재설정을 자동 보정합니다.';
+            setStep('toe');
+        }
+
+        function releaseWorldAnchor() {
+            if (worldAnchor) {
+                try {
+                    worldAnchor.delete();
+                } catch (error) {
+                    console.warn('[AR] Anchor 해제 실패:', error);
+                }
+            }
+
+            worldAnchor = null;
+            resetAnchorPoseFilter();
+        }
+
+        function beginWallFloorAnchorCreation(hitResult, hitMatrix) {
+            if (!pendingWallFloorSelection || step !== 'wallFloor') return;
+
+            pendingWallFloorSelection = false;
+            pendingWallFloorWorldMatrix = hitMatrix.clone();
+            currentHitMatrix = null;
+
+            const requestToken = ++anchorRequestToken;
+            const canCreateAnchor =
+                anchorFeatureEnabled &&
+                typeof hitResult?.createAnchor === 'function';
+
+            if (!canCreateAnchor) {
+                finalizeWallFloorWithoutAnchor(
+                    pendingWallFloorWorldMatrix,
+                    'Anchor API를 사용할 수 없음'
+                );
+                return;
+            }
+
+            anchorState = 'creating';
+            anchorAwaitingPoseFrames = 0;
+
+            let anchorPromise;
+
+            try {
+                // 반드시 현재 활성 XRFrame에 속한 hit-test 결과에서 호출한다.
+                anchorPromise = hitResult.createAnchor();
+            } catch (error) {
+                console.warn('[AR] Anchor 생성 호출 실패, 폴백 사용:', error);
+                finalizeWallFloorWithoutAnchor(
+                    pendingWallFloorWorldMatrix,
+                    error?.message || 'Anchor 생성 호출 실패'
+                );
+                return;
+            }
+
+            window.setTimeout(() => {
+                if (
+                    requestToken === anchorRequestToken &&
+                    anchorState === 'creating' &&
+                    pendingWallFloorWorldMatrix
+                ) {
+                    console.warn('[AR] Anchor 생성 응답 시간 초과, 폴백으로 전환합니다.');
+                    finalizeWallFloorWithoutAnchor(
+                        pendingWallFloorWorldMatrix,
+                        'Anchor 생성 응답 시간 초과'
+                    );
+                }
+            }, ANCHOR_CREATION_TIMEOUT_MS);
+
+            Promise.resolve(anchorPromise)
+                .then((anchor) => {
+                    const isStale =
+                        requestToken !== anchorRequestToken ||
+                        !renderer?.xr?.isPresenting ||
+                        step !== 'wallFloor';
+
+                    if (isStale) {
+                        try {
+                            anchor.delete();
+                        } catch (error) {
+                            console.warn('[AR] 사용하지 않는 Anchor 해제 실패:', error);
+                        }
+                        return;
+                    }
+
+                    worldAnchor = anchor;
+                    anchorState = 'awaiting-pose';
+                    anchorAwaitingPoseFrames = 0;
+                    console.info('[AR] Anchor 생성 완료, 첫 pose를 기다립니다.');
+                })
+                .catch((error) => {
+                    if (requestToken !== anchorRequestToken) return;
+
+                    console.warn('[AR] Anchor 생성 실패, reset 보정 폴백 사용:', error);
+                    finalizeWallFloorWithoutAnchor(
+                        pendingWallFloorWorldMatrix,
+                        error?.message || 'Anchor 생성 실패'
+                    );
+                });
+        }
+
+        function finalizeWallFloorWithoutAnchor(hitMatrix, reason) {
+            if (!hitMatrix || step !== 'wallFloor') return;
+
+            anchorRequestToken++;
+            releaseWorldAnchor();
+            anchorState = 'fallback';
+            anchorFeatureEnabled = false;
+            anchorAwaitingPoseFrames = 0;
+            anchorPoseMissingFrames = 0;
+
+            const referencePosition = new THREE.Vector3()
+                .setFromMatrixPosition(hitMatrix);
+            const localPosition = referencePositionToContentLocal(referencePosition);
+
+            console.info('[AR] Anchor 폴백 활성화:', reason);
+            createWallFloorMarker(localPosition);
+            pendingWallFloorWorldMatrix = null;
+        }
+
+        function applyFilteredAnchorPoseToward(
+            targetPosition,
+            targetQuaternion,
+            positionSmoothing = ANCHOR_POSITION_SMOOTHING,
+            rotationSmoothing = ANCHOR_ROTATION_SMOOTHING
+        ) {
+            const positionDistance = filteredAnchorPosition.distanceTo(targetPosition);
+
+            if (positionDistance > ANCHOR_POSITION_DEADBAND_M) {
+                const positionFactor = Math.min(
+                    positionSmoothing,
+                    ANCHOR_MAX_POSITION_STEP_M / Math.max(positionDistance, 0.000001)
+                );
+                filteredAnchorPosition.lerp(targetPosition, positionFactor);
+            }
+
+            const rotationAngle = filteredAnchorQuaternion.angleTo(targetQuaternion);
+
+            if (rotationAngle > ANCHOR_ROTATION_DEADBAND_RAD) {
+                const rotationFactor = Math.min(
+                    rotationSmoothing,
+                    ANCHOR_MAX_ROTATION_STEP_RAD / Math.max(rotationAngle, 0.000001)
+                );
+                filteredAnchorQuaternion.slerp(targetQuaternion, rotationFactor);
+                filteredAnchorQuaternion.normalize();
+            }
+
+            const filteredMatrix = composeFilteredAnchorMatrix();
+            setContentRootMatrix(filteredMatrix);
+            lastValidContentRootMatrix.copy(filteredMatrix);
+            hasLastValidContentRootMatrix = true;
+        }
+
+        function holdLastAnchorPose() {
+            anchorTrackingHoldFrames++;
+
+            if (hasFilteredAnchorPose) {
+                setContentRootMatrix(composeFilteredAnchorMatrix());
+            } else if (hasLastValidContentRootMatrix) {
+                setContentRootMatrix(lastValidContentRootMatrix);
+            }
+
+            if (
+                anchorTrackingHoldFrames === ANCHOR_TRACKING_HOLD_WARNING_FRAMES &&
+                performance.now() >= resultMessageLockUntil
+            ) {
+                resultEl.innerHTML =
+                    savedDistanceText +
+                    '<br><span style="color:#ffcc00;">공간 추적이 잠시 불안정해 마지막 정상 위치를 유지하고 있습니다. 주변을 천천히 다시 비춰 주세요.</span>';
+                resultMessageLockUntil = performance.now() + 2500;
+            }
+        }
+
+        function updateAnchorTracking(frame) {
+            if (!contentRoot || !renderer?.xr?.isPresenting || !worldAnchor) return;
+
+            const referenceSpace = renderer.xr.getReferenceSpace();
+            if (!referenceSpace) return;
+
+            // viewer pose가 없거나 추정 위치를 사용 중일 때는 Anchor의
+            // 급격한 보정을 받아들이지 않고 마지막 정상 위치를 유지한다.
+            if (!currentViewerPoseAvailable || currentViewerPoseEmulated) {
+                if (anchorState === 'awaiting-pose') {
+                    anchorAwaitingPoseFrames++;
+
+                    if (anchorAwaitingPoseFrames >= ANCHOR_AWAITING_POSE_LIMIT_FRAMES) {
+                        console.warn('[AR] 추적 불안정으로 Anchor 첫 pose를 받지 못해 폴백으로 전환합니다.');
+                        finalizeWallFloorWithoutAnchor(
+                            pendingWallFloorWorldMatrix,
+                            'Anchor 첫 pose 추적 시간 초과'
+                        );
+                        return;
+                    }
+                }
+
+                holdLastAnchorPose();
+                return;
+            }
+
+            let anchorPose = null;
+
+            try {
+                anchorPose = frame.getPose(worldAnchor.anchorSpace, referenceSpace);
+            } catch (error) {
+                console.warn('[AR] Anchor pose 조회 실패:', error);
+            }
+
+            if (!anchorPose) {
+                anchorPoseMissingFrames++;
+                holdLastAnchorPose();
+
+                if (anchorState === 'awaiting-pose') {
+                    anchorAwaitingPoseFrames++;
+
+                    if (anchorAwaitingPoseFrames >= ANCHOR_AWAITING_POSE_LIMIT_FRAMES) {
+                        console.warn('[AR] Anchor pose 대기 시간 초과, 폴백으로 전환합니다.');
+                        finalizeWallFloorWithoutAnchor(
+                            pendingWallFloorWorldMatrix,
+                            'Anchor pose 대기 시간 초과'
+                        );
+                    }
+                    return;
+                }
+
+                if (
+                    anchorState === 'active' &&
+                    anchorPoseMissingFrames === ANCHOR_MISSING_WARNING_FRAMES
+                ) {
+                    console.warn('[AR] Anchor pose가 일시적으로 누락되어 마지막 위치를 유지합니다.');
+                }
+                return;
+            }
+
+            anchorTrackingHoldFrames = 0;
+            anchorPoseMissingFrames = 0;
+            anchorAwaitingPoseFrames = 0;
+
+            const rawAnchorMatrix = new THREE.Matrix4()
+                .fromArray(anchorPose.transform.matrix);
+            const rawPosition = new THREE.Vector3();
+            const rawQuaternion = new THREE.Quaternion();
+            const rawScale = new THREE.Vector3();
+            rawAnchorMatrix.decompose(rawPosition, rawQuaternion, rawScale);
+            rawQuaternion.normalize();
+
+            if (!hasFilteredAnchorPose) {
+                setFilteredAnchorPoseFromMatrix(rawAnchorMatrix);
+                clearAnchorJumpCandidate();
+
+                if (anchorState === 'awaiting-pose' || anchorState === 'creating') {
+                    anchorState = 'active';
+                    pendingWallFloorWorldMatrix = null;
+
+                    // Anchor는 1단계 hit pose에 생성했으므로 기준점은 로컬 원점이다.
+                    createWallFloorMarker(new THREE.Vector3(0, 0, 0));
+                }
+                return;
+            }
+
+            const positionDelta = filteredAnchorPosition.distanceTo(rawPosition);
+            const rotationDelta = filteredAnchorQuaternion.angleTo(rawQuaternion);
+
+            if (
+                positionDelta <= ANCHOR_POSITION_DEADBAND_M &&
+                rotationDelta <= ANCHOR_ROTATION_DEADBAND_RAD
+            ) {
+                clearAnchorJumpCandidate();
+                setContentRootMatrix(composeFilteredAnchorMatrix());
+                return;
+            }
+
+            const isLargeJump =
+                positionDelta >= ANCHOR_LARGE_JUMP_POSITION_M ||
+                rotationDelta >= ANCHOR_LARGE_JUMP_ROTATION_RAD;
+
+            if (isLargeJump) {
+                const candidateMatches =
+                    hasAnchorJumpCandidate &&
+                    anchorJumpCandidatePosition.distanceTo(rawPosition) <=
+                    ANCHOR_JUMP_POSITION_TOLERANCE_M &&
+                    anchorJumpCandidateQuaternion.angleTo(rawQuaternion) <=
+                    ANCHOR_JUMP_ROTATION_TOLERANCE_RAD;
+
+                if (!candidateMatches) {
+                    anchorJumpCandidatePosition.copy(rawPosition);
+                    anchorJumpCandidateQuaternion.copy(rawQuaternion);
+                    hasAnchorJumpCandidate = true;
+                    anchorJumpCandidateFrames = 1;
+                } else {
+                    anchorJumpCandidatePosition.lerp(rawPosition, 0.25);
+                    anchorJumpCandidateQuaternion.slerp(rawQuaternion, 0.25);
+                    anchorJumpCandidateQuaternion.normalize();
+                    anchorJumpCandidateFrames++;
+                }
+
+                if (anchorJumpCandidateFrames < ANCHOR_JUMP_CONFIRM_FRAMES) {
+                    // 한두 프레임의 순간이동은 무시한다.
+                    setContentRootMatrix(composeFilteredAnchorMatrix());
+                    return;
+                }
+
+                // 같은 큰 보정이 여러 프레임 유지되면 실제 재로컬라이징으로
+                // 판단하되, 화면에서 튀지 않도록 제한된 속도로 따라간다.
+                applyFilteredAnchorPoseToward(
+                    anchorJumpCandidatePosition,
+                    anchorJumpCandidateQuaternion,
+                    0.10,
+                    0.09
+                );
+
+                const remainingPosition = filteredAnchorPosition.distanceTo(
+                    anchorJumpCandidatePosition
+                );
+                const remainingRotation = filteredAnchorQuaternion.angleTo(
+                    anchorJumpCandidateQuaternion
+                );
+
+                if (
+                    remainingPosition <= ANCHOR_POSITION_DEADBAND_M &&
+                    remainingRotation <= ANCHOR_ROTATION_DEADBAND_RAD
+                ) {
+                    clearAnchorJumpCandidate();
+                }
+                return;
+            }
+
+            clearAnchorJumpCandidate();
+            applyFilteredAnchorPoseToward(rawPosition, rawQuaternion);
+        }
+
+        function ensureReferenceSpaceListener() {
+            if (!renderer?.xr?.isPresenting) return;
+
+            const referenceSpace = renderer.xr.getReferenceSpace();
+            if (!referenceSpace || referenceSpace === trackedReferenceSpace) return;
+
+            detachReferenceSpaceListener();
+
+            trackedReferenceSpace = referenceSpace;
+            referenceSpaceResetHandler = handleReferenceSpaceReset;
+            trackedReferenceSpace.addEventListener(
+                'reset',
+                referenceSpaceResetHandler
+            );
+
+            console.info('[AR] XRReferenceSpace reset 감지를 시작합니다.');
+        }
+
+        function detachReferenceSpaceListener() {
+            if (trackedReferenceSpace && referenceSpaceResetHandler) {
+                trackedReferenceSpace.removeEventListener(
+                    'reset',
+                    referenceSpaceResetHandler
+                );
+            }
+
+            trackedReferenceSpace = null;
+            referenceSpaceResetHandler = null;
+        }
+
+        function applyReferenceSpaceCorrectionToAnchorFilter(correctionMatrix) {
+            if (hasFilteredAnchorPose) {
+                const filteredMatrix = composeFilteredAnchorMatrix();
+                filteredMatrix.premultiply(correctionMatrix);
+                filteredMatrix.decompose(
+                    filteredAnchorPosition,
+                    filteredAnchorQuaternion,
+                    filteredAnchorScale
+                );
+                filteredAnchorQuaternion.normalize();
+                filteredAnchorScale.set(1, 1, 1);
+                setContentRootMatrix(composeFilteredAnchorMatrix());
+            } else if (contentRoot) {
+                contentRoot.matrix.premultiply(correctionMatrix);
+                contentRoot.matrixWorldNeedsUpdate = true;
+                contentRoot.updateMatrixWorld(true);
+            }
+
+            if (hasLastValidContentRootMatrix) {
+                lastValidContentRootMatrix.premultiply(correctionMatrix);
+            }
+
+            if (hasAnchorJumpCandidate) {
+                const candidateMatrix = new THREE.Matrix4().compose(
+                    anchorJumpCandidatePosition,
+                    anchorJumpCandidateQuaternion,
+                    new THREE.Vector3(1, 1, 1)
+                );
+                const candidateScale = new THREE.Vector3();
+                candidateMatrix.premultiply(correctionMatrix);
+                candidateMatrix.decompose(
+                    anchorJumpCandidatePosition,
+                    anchorJumpCandidateQuaternion,
+                    candidateScale
+                );
+                anchorJumpCandidateQuaternion.normalize();
+            }
+        }
+
+        function handleReferenceSpaceReset(event) {
+            currentHitMatrix = null;
+            clearAnchorJumpCandidate();
+
+            if (!event.transform) {
+                console.warn('[AR] 좌표계 reset 발생: 보정 transform 없음');
+
+                if (!worldAnchor) {
+                    resultEl.innerHTML = `
+                        <span style="color:#ffcc00; font-weight:800;">
+                            공간 좌표가 크게 재설정되었습니다.
+                        </span><br>
+                        <span style="font-size:0.95em;">
+                            정확한 배치를 위해 초기화 후 다시 측정해 주세요.
+                        </span>
+                    `;
+                    resultMessageLockUntil = performance.now() + 5000;
+                }
+                return;
+            }
+
+            // 기존 콘텐츠와 필터 상태를 새 reference space 좌표로 변환한다.
+            // Anchor는 삭제하지 않으며, 다음 정상 pose부터 같은 필터를 계속 사용한다.
+            const correctionMatrix = new THREE.Matrix4()
+                .fromArray(event.transform.inverse.matrix);
+
+            applyReferenceSpaceCorrectionToAnchorFilter(correctionMatrix);
+
+            if (pendingWallFloorWorldMatrix) {
+                pendingWallFloorWorldMatrix.premultiply(correctionMatrix);
+            }
+
+            console.warn('[AR] XRReferenceSpace reset 보정 적용');
+
+            if (performance.now() >= resultMessageLockUntil) {
+                resultEl.innerHTML =
+                    savedDistanceText +
+                    '<br><span style="color:#00d4ff;">공간 추적 좌표를 자동 보정했습니다.</span>';
+                resultMessageLockUntil = performance.now() + 1200;
+            }
+        }
+
+        function updateTrackingDiagnostics(frame) {
+            if (!trackedReferenceSpace) {
+                currentViewerPoseAvailable = false;
+                currentViewerPoseEmulated = false;
+                return;
+            }
+
+            const viewerPose = frame.getViewerPose(trackedReferenceSpace);
+
+            if (!viewerPose) {
+                currentViewerPoseAvailable = false;
+                currentViewerPoseEmulated = false;
+
+                if (lastViewerPoseAvailable) {
+                    console.warn('[AR] viewer pose 누락: 위치 추적이 일시적으로 손실되었습니다.');
+                }
+                lastViewerPoseAvailable = false;
+                return;
+            }
+
+            currentViewerPoseAvailable = true;
+            currentViewerPoseEmulated = viewerPose.emulatedPosition === true;
+
+            if (!lastViewerPoseAvailable) {
+                console.info('[AR] viewer pose 복구');
+            }
+            lastViewerPoseAvailable = true;
+
+            if (viewerPose.emulatedPosition !== lastViewerPoseEmulated) {
+                lastViewerPoseEmulated = viewerPose.emulatedPosition;
+                console.info('[AR] viewer emulatedPosition:', viewerPose.emulatedPosition);
+            }
         }
 
         function requestHitTestSource(session) {
@@ -1319,6 +2065,7 @@
         }
 
         function updateDepthOcclusion() {
+            if (!ENABLE_DEPTH_OCCLUSION) return;
             if (!renderer?.xr?.isPresenting) return;
             if (depthOcclusionMesh || depthSensingState === 'unsupported') return;
             if (!renderer.xr.hasDepthSensing()) return;
@@ -1419,9 +2166,6 @@
 
             requestHitTestSource(session);
 
-            // 3단계에서는 기기의 수직 벽면 hit-test를 사용하지 않는다.
-            // 화면 중앙 시선과 1·2단계로 만든 가상 벽면의 교차점으로
-            // 높이를 계산하므로 hit-test 결과 유무와 관계없이 진행할 수 있다.
             if (step === 'placeImage') {
                 currentHitMatrix = null;
 
@@ -1439,10 +2183,23 @@
             const hitTestResults = frame.getHitTestResults(hitTestSource);
 
             if (hitTestResults.length > 0) {
-                const pose = hitTestResults[0].getPose(referenceSpace);
+                const hitResult = hitTestResults[0];
+                const pose = hitResult.getPose(referenceSpace);
                 currentHitMatrix = pose
                     ? Array.from(pose.transform.matrix)
                     : null;
+
+                if (
+                    pendingWallFloorSelection &&
+                    step === 'wallFloor' &&
+                    pose
+                ) {
+                    beginWallFloorAnchorCreation(
+                        hitResult,
+                        new THREE.Matrix4().fromArray(pose.transform.matrix)
+                    );
+                    return;
+                }
 
                 if (performance.now() < resultMessageLockUntil) return;
 
@@ -1462,6 +2219,16 @@
             } else {
                 currentHitMatrix = null;
 
+                if (pendingWallFloorSelection && step === 'wallFloor') {
+                    resultEl.innerHTML = `
+                        <span style="color:#ffcc00; font-weight:800;">
+                            기준점을 다시 인식하는 중입니다.
+                        </span><br>
+                        기기를 천천히 움직여 같은 바닥 지점을 비춰 주세요.
+                    `;
+                    return;
+                }
+
                 if (performance.now() < resultMessageLockUntil) return;
                 if (isLoadingProductImage) return;
 
@@ -1472,15 +2239,22 @@
         }
 
         function render(timestamp, frame) {
+            if (frame && renderer?.xr?.isPresenting) {
+                ensureReferenceSpaceListener();
+
+                // Anchor pose를 평가하기 전에 현재 viewer 추적 상태를 먼저 갱신한다.
+                updateTrackingDiagnostics(frame);
+                updateAnchorTracking(frame);
+                updateHitTest(frame);
+            }
+
             animateMarkerScale(wallFloorMesh);
             animateMarkerScale(toeMesh);
             updateMeasurementLine();
 
-            if (frame && renderer?.xr?.isPresenting) {
-                updateHitTest(frame);
+            if (ENABLE_DEPTH_OCCLUSION) {
+                updateDepthOcclusion();
             }
-
-            updateDepthOcclusion();
 
             if (renderer && scene && camera) {
                 renderer.render(scene, camera);
