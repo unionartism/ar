@@ -174,12 +174,31 @@
             left: 50%;
             width: 30px;
             height: 30px;
-            transform: translate(-50%, -50%);
-            z-index: 5;
+            transform: translate(-50%, -50%) scale(0.82);
+            z-index: 6;
             pointer-events: none;
             border: 2px solid var(--crosshair-color);
             border-radius: 50%;
-            display: none;
+            opacity: 0;
+            visibility: hidden;
+            transition:
+                opacity 0.22s ease,
+                transform 0.22s ease,
+                filter 0.22s ease,
+                width 0.22s ease,
+                height 0.22s ease;
+            filter: drop-shadow(0 0 5px rgba(0, 0, 0, 0.75));
+        }
+
+        #crosshair.is-visible {
+            opacity: 1;
+            visibility: visible;
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        #crosshair.is-hold {
+            opacity: 0.48;
+            transform: translate(-50%, -50%) scale(0.94);
         }
 
         #crosshair::before,
@@ -187,6 +206,14 @@
             content: '';
             position: absolute;
             background: var(--crosshair-color);
+            transition:
+                left 0.22s ease,
+                right 0.22s ease,
+                top 0.22s ease,
+                bottom 0.22s ease,
+                width 0.22s ease,
+                height 0.22s ease,
+                transform 0.22s ease;
         }
 
         #crosshair::before {
@@ -203,6 +230,231 @@
             bottom: -5px;
             width: 2px;
             transform: translateX(-50%);
+        }
+
+        /* 1단계: 벽과 바닥의 경계선을 맞추기 쉽도록 가로선만 확장한다. */
+        #crosshair.mode-wall-floor::before {
+            left: 50%;
+            right: auto;
+            width: 100px;
+            transform: translate(-50%, -50%);
+        }
+
+        /* 2단계: 발끝 위치를 넓게 조준할 수 있도록 기존 조준점 전체를 키운다. */
+        #crosshair.mode-toe {
+            width: 48px;
+            height: 48px;
+        }
+
+        /* 3단계: 이미지 높이는 기존 크기의 정밀 조준점을 사용한다. */
+        #crosshair.mode-place-image {
+            width: 30px;
+            height: 30px;
+        }
+
+        #scan-guide {
+            --scan-color: #00d4ff;
+
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            z-index: 6;
+            width: min(78vw, 260px);
+            transform: translate(-50%, -50%) scale(0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 14px;
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            transition:
+                opacity 0.25s ease,
+                transform 0.25s ease;
+        }
+
+        #scan-guide.is-visible {
+            opacity: 1;
+            visibility: visible;
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        .scan-visual {
+            position: relative;
+            width: 116px;
+            height: 116px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            perspective: 520px;
+        }
+
+        .scan-cube {
+            position: relative;
+            width: 58px;
+            height: 58px;
+            transform-style: preserve-3d;
+            animation:
+                scan-cube-rotate 6s linear infinite,
+                scan-cube-float 2.6s ease-in-out infinite;
+            filter:
+                drop-shadow(0 0 6px color-mix(in srgb, var(--scan-color) 70%, transparent)) drop-shadow(0 0 14px rgba(0, 0, 0, 0.45));
+        }
+
+        .scan-cube-face {
+            position: absolute;
+            inset: 0;
+            border: 2px solid var(--scan-color);
+            background: color-mix(in srgb, var(--scan-color) 7%, transparent);
+            backface-visibility: visible;
+        }
+
+        .scan-cube-face.front {
+            transform: translateZ(29px);
+        }
+
+        .scan-cube-face.back {
+            transform: rotateY(180deg) translateZ(29px);
+        }
+
+        .scan-cube-face.right {
+            transform: rotateY(90deg) translateZ(29px);
+        }
+
+        .scan-cube-face.left {
+            transform: rotateY(-90deg) translateZ(29px);
+        }
+
+        .scan-cube-face.top {
+            transform: rotateX(90deg) translateZ(29px);
+        }
+
+        .scan-cube-face.bottom {
+            transform: rotateX(-90deg) translateZ(29px);
+        }
+
+        .scan-orbit {
+            position: absolute;
+            inset: 5px;
+            border: 1px solid color-mix(in srgb, var(--scan-color) 58%, transparent);
+            border-left-color: transparent;
+            border-right-color: transparent;
+            border-radius: 50%;
+            transform: rotateX(68deg);
+            animation: scan-orbit-rotate 3.4s linear infinite;
+        }
+
+        .scan-orbit::before,
+        .scan-orbit::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            width: 7px;
+            height: 7px;
+            margin-top: -3.5px;
+            border-top: 2px solid var(--scan-color);
+            border-right: 2px solid var(--scan-color);
+        }
+
+        .scan-orbit::before {
+            left: -1px;
+            transform: rotate(-135deg);
+        }
+
+        .scan-orbit::after {
+            right: -1px;
+            transform: rotate(45deg);
+        }
+
+        .scan-motion {
+            display: grid;
+            grid-template-columns: 30px minmax(0, 1fr) 30px;
+            align-items: center;
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 999px;
+            background: rgba(0, 0, 0, 0.55);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+        }
+
+        .scan-motion-text {
+            font-size: 13px;
+            line-height: 1.4;
+            font-weight: 800;
+            text-align: center;
+            color: #fff;
+            word-break: keep-all;
+        }
+
+        .scan-arrow {
+            font-size: 25px;
+            line-height: 1;
+            font-weight: 900;
+            color: var(--scan-color);
+            text-align: center;
+            animation: scan-arrow-pulse 1.35s ease-in-out infinite;
+        }
+
+        .scan-arrow.right {
+            animation-delay: 0.18s;
+        }
+
+        @keyframes scan-cube-rotate {
+            from {
+                transform: rotateX(-20deg) rotateY(0deg);
+            }
+
+            to {
+                transform: rotateX(340deg) rotateY(360deg);
+            }
+        }
+
+        @keyframes scan-cube-float {
+
+            0%,
+            100% {
+                margin-top: -3px;
+            }
+
+            50% {
+                margin-top: 5px;
+            }
+        }
+
+        @keyframes scan-orbit-rotate {
+            from {
+                transform: rotateX(68deg) rotateZ(0deg);
+            }
+
+            to {
+                transform: rotateX(68deg) rotateZ(360deg);
+            }
+        }
+
+        @keyframes scan-arrow-pulse {
+
+            0%,
+            100% {
+                opacity: 0.35;
+                transform: translateX(0);
+            }
+
+            50% {
+                opacity: 1;
+                transform: translateX(3px);
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+
+            .scan-cube,
+            .scan-orbit,
+            .scan-arrow {
+                animation-duration: 12s;
+            }
         }
 
         #ARButton {
@@ -296,7 +548,29 @@
 </head>
 
 <body>
-    <div id="crosshair"></div>
+    <div id="crosshair" aria-hidden="true"></div>
+
+    <div id="scan-guide" aria-hidden="true">
+        <div class="scan-visual">
+            <div class="scan-orbit"></div>
+            <div class="scan-cube">
+                <span class="scan-cube-face front"></span>
+                <span class="scan-cube-face back"></span>
+                <span class="scan-cube-face right"></span>
+                <span class="scan-cube-face left"></span>
+                <span class="scan-cube-face top"></span>
+                <span class="scan-cube-face bottom"></span>
+            </div>
+        </div>
+        <div class="scan-motion">
+            <span class="scan-arrow left" aria-hidden="true">‹</span>
+            <span class="scan-motion-text">
+                휴대폰을 천천히 움직여<br>
+                공간을 스캔하세요
+            </span>
+            <span class="scan-arrow right" aria-hidden="true">›</span>
+        </div>
+    </div>
 
     <div id="unsupported-message">
         <div class="box">
@@ -344,6 +618,7 @@
         const actionBtn = document.getElementById('action-btn');
         const resetBtn = document.getElementById('reset-btn');
         const crosshair = document.getElementById('crosshair');
+        const scanGuide = document.getElementById('scan-guide');
         const closeBtn = document.getElementById('close-btn');
         const productNameEl = document.getElementById('product-name');
         const unsupportedMessage = document.getElementById('unsupported-message');
@@ -377,6 +652,12 @@
         // 단계: ready -> wallFloor -> toe -> placeImage -> done
         let step = 'ready';
         let currentHitMatrix = null;
+
+        // 평면 탐색 UI 상태. 1·2단계에서는 평면을 찾지 못하면 스캔 모션,
+        // 인식하면 조준점을 표시한다. 일시적인 hit-test 누락으로 UI가
+        // 깜빡이지 않도록 마지막 인식 후 일정 시간은 조준점을 유지한다.
+        let targetingMode = 'hidden';
+        let lastPlaneDetectedAt = 0;
 
         // 모든 측정 오브젝트는 이 루트 아래에 배치한다.
         // Anchor가 지원되면 필터링한 Anchor pose로 루트 행렬을 갱신하고,
@@ -484,6 +765,10 @@
         const ANCHOR_MAX_POSITION_STEP_M = 0.018;
         const ANCHOR_MAX_ROTATION_STEP_RAD = THREE.MathUtils.degToRad(1.2);
         const ANCHOR_TRACKING_HOLD_WARNING_FRAMES = 90;
+
+        // hit-test가 한두 프레임 누락됐을 때 스캔 UI와 조준점이
+        // 깜빡이지 않도록 마지막 평면 인식 후 이 시간만큼 유예한다.
+        const PLANE_LOST_DELAY_MS = 1800;
 
         init().catch((error) => {
             console.error('[AR] 초기화 실패:', error);
@@ -745,7 +1030,7 @@
             arButton.style.setProperty('visibility', 'hidden', 'important');
             arButton.style.setProperty('pointer-events', 'none', 'important');
 
-            crosshair.style.display = 'block';
+            setTargetingMode('hidden');
             uiBottom.style.display = 'block';
 
             const session = renderer.xr.getSession();
@@ -804,7 +1089,7 @@
                 }
             });
 
-            crosshair.style.display = 'none';
+            setTargetingMode('hidden');
             uiBottom.style.display = 'none';
 
             if (activeXRSession && sessionVisibilityHandler) {
@@ -832,10 +1117,102 @@
 
         function setCrosshairColor(color) {
             crosshair.style.setProperty('--crosshair-color', color);
+            scanGuide.style.setProperty('--scan-color', color);
+        }
+
+        function setCrosshairStepMode(nextStep) {
+            crosshair.classList.remove(
+                'mode-wall-floor',
+                'mode-toe',
+                'mode-place-image'
+            );
+
+            if (nextStep === 'wallFloor') {
+                crosshair.classList.add('mode-wall-floor');
+            } else if (nextStep === 'toe') {
+                crosshair.classList.add('mode-toe');
+            } else if (nextStep === 'placeImage') {
+                crosshair.classList.add('mode-place-image');
+            }
+        }
+
+        function setTargetingMode(nextMode) {
+            if (targetingMode === nextMode) return;
+
+            targetingMode = nextMode;
+
+            const showScan = nextMode === 'scan';
+            const showCrosshair =
+                nextMode === 'crosshair' ||
+                nextMode === 'hold';
+
+            scanGuide.classList.toggle('is-visible', showScan);
+            scanGuide.setAttribute('aria-hidden', showScan ? 'false' : 'true');
+
+            crosshair.classList.toggle('is-visible', showCrosshair);
+            crosshair.classList.toggle('is-hold', nextMode === 'hold');
+            crosshair.setAttribute('aria-hidden', showCrosshair ? 'false' : 'true');
+        }
+
+        function syncTargetingUIForStep() {
+            if (!renderer?.xr?.isPresenting) {
+                setTargetingMode('hidden');
+                return;
+            }
+
+            if (step === 'placeImage') {
+                setTargetingMode('crosshair');
+                return;
+            }
+
+            if (step === 'done' || step === 'ready') {
+                setTargetingMode('hidden');
+                return;
+            }
+
+            if (step === 'wallFloor' || step === 'toe') {
+                const now = performance.now();
+
+                if (
+                    currentHitMatrix &&
+                    lastPlaneDetectedAt > 0
+                ) {
+                    setTargetingMode('crosshair');
+                } else if (
+                    lastPlaneDetectedAt > 0 &&
+                    now - lastPlaneDetectedAt < PLANE_LOST_DELAY_MS
+                ) {
+                    setTargetingMode('hold');
+                } else {
+                    setTargetingMode('scan');
+                }
+            }
+        }
+
+        function markPlaneDetected() {
+            lastPlaneDetectedAt = performance.now();
+
+            if (step === 'wallFloor' || step === 'toe') {
+                setTargetingMode('crosshair');
+            }
+        }
+
+        function markPlaneMissing(now = performance.now()) {
+            if (step !== 'wallFloor' && step !== 'toe') return;
+
+            if (
+                lastPlaneDetectedAt > 0 &&
+                now - lastPlaneDetectedAt < PLANE_LOST_DELAY_MS
+            ) {
+                setTargetingMode('hold');
+            } else {
+                setTargetingMode('scan');
+            }
         }
 
         function setStep(nextStep) {
             step = nextStep;
+            setCrosshairStepMode(nextStep);
 
             if (step === 'wallFloor') {
                 stepTitle.textContent = '1단계: 벽/바닥선';
@@ -884,6 +1261,8 @@
                 actionBtn.style.color = '#fff';
                 actionBtn.disabled = true;
             }
+
+            syncTargetingUIForStep();
         }
 
         function onActionTriggered() {
@@ -1365,6 +1744,7 @@
             lineProgress = 0;
             savedDistanceText = '';
             currentHitMatrix = null;
+            lastPlaneDetectedAt = 0;
 
             actionBtn.disabled = false;
             actionBtn.style.opacity = '1';
@@ -1375,6 +1755,7 @@
                 setStep('wallFloor');
             } else {
                 step = 'ready';
+                setCrosshairStepMode('ready');
                 stepTitle.textContent = 'AR 준비';
                 stepTitle.style.color = '#00ff66';
                 setCrosshairColor('#00ff66');
@@ -2043,6 +2424,7 @@
                         hitTestSession = null;
                         hitTestRetryAfter = performance.now() + 1500;
 
+                        markPlaneMissing();
                         resultEl.textContent = '공간 인식을 시작하지 못했습니다. 기기를 천천히 움직여 다시 시도해 주세요.';
                         resultMessageLockUntil = performance.now() + 2500;
                     }
@@ -2157,7 +2539,6 @@
                 currentLineEnd.z
             ]);
         }
-
         function updateHitTest(frame) {
             const referenceSpace = renderer.xr.getReferenceSpace();
             const session = renderer.xr.getSession();
@@ -2166,8 +2547,10 @@
 
             requestHitTestSource(session);
 
+            // 3단계는 벽면 hit-test를 사용하지 않으므로 항상 조준점을 표시한다.
             if (step === 'placeImage') {
                 currentHitMatrix = null;
+                setTargetingMode('crosshair');
 
                 if (performance.now() < resultMessageLockUntil) return;
                 if (isLoadingProductImage) return;
@@ -2178,16 +2561,34 @@
                 return;
             }
 
-            if (!hitTestSource) return;
+            if (step === 'done') {
+                currentHitMatrix = null;
+                setTargetingMode('hidden');
+                return;
+            }
+
+            if (!hitTestSource) {
+                currentHitMatrix = null;
+                markPlaneMissing();
+                return;
+            }
 
             const hitTestResults = frame.getHitTestResults(hitTestSource);
 
             if (hitTestResults.length > 0) {
                 const hitResult = hitTestResults[0];
                 const pose = hitResult.getPose(referenceSpace);
+
                 currentHitMatrix = pose
                     ? Array.from(pose.transform.matrix)
                     : null;
+
+                if (pose) {
+                    // 평면이 잡히는 즉시 스캔 모션을 숨기고 조준점을 표시한다.
+                    markPlaneDetected();
+                } else {
+                    markPlaneMissing();
+                }
 
                 if (
                     pendingWallFloorSelection &&
@@ -2213,11 +2614,15 @@
                 if (isLoadingProductImage) return;
 
                 if (step !== 'done') {
-                    resultEl.textContent = '공간 인식 성공! 확정 버튼을 누르세요.';
+                    resultEl.textContent = '공간 인식 성공! 조준점을 맞춘 뒤 확정 버튼을 누르세요.';
                 }
 
             } else {
                 currentHitMatrix = null;
+
+                // 한두 프레임의 일시적인 누락은 흐린 조준점으로 유지하고,
+                // 1.8초 이상 연속으로 평면을 잃었을 때만 스캔 UI로 복귀한다.
+                markPlaneMissing();
 
                 if (pendingWallFloorSelection && step === 'wallFloor') {
                     resultEl.innerHTML = `
@@ -2233,7 +2638,10 @@
                 if (isLoadingProductImage) return;
 
                 if (step !== 'done') {
-                    resultEl.textContent = '바닥 평면을 탐색 중입니다...';
+                    resultEl.textContent =
+                        targetingMode === 'scan'
+                            ? '바닥 평면을 탐색 중입니다...'
+                            : '평면 인식을 잠시 유지하고 있습니다...';
                 }
             }
         }
