@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
-    <title>벽면 거리 측정 및 지정 위치 이미지 배치 AR 완성형</title>
+    <title>AR로 벽에 걸어보기</title>
 
     <style>
         * {
@@ -43,7 +43,14 @@
         #top-panel {
             padding: 20px;
             padding-top: calc(10px + env(safe-area-inset-top, 0));
-            background: linear-gradient(to bottom, rgba(0, 0, 0, 0.8), rgba(0, 0, 0, 0));
+            background: linear-gradient(to bottom, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0));
+        }
+
+        #top-row {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
         }
 
         #step-title {
@@ -53,10 +60,58 @@
             margin-bottom: 5px;
         }
 
+        #product-name {
+            max-width: 72vw;
+            margin-top: 4px;
+            font-size: 12px;
+            line-height: 1.4;
+            opacity: 0.8;
+            word-break: keep-all;
+        }
+
+        .ar-product-artist {
+            font-size: 12px;
+            line-height: 1.35;
+            opacity: 0.75;
+            font-weight: 500;
+        }
+
+        .ar-product-title {
+            margin-top: 2px;
+            font-size: 14px;
+            line-height: 1.35;
+            opacity: 0.95;
+            font-weight: 800;
+        }
+
+        .ar-product-size {
+            margin-top: 4px;
+            font-size: 12px;
+            line-height: 1.35;
+            opacity: 0.7;
+            font-weight: 600;
+        }
+
         #guide-text {
+            margin-top: 8px;
             font-size: 14px;
             line-height: 1.4;
             opacity: 0.9;
+            word-break: keep-all;
+        }
+
+        #close-btn {
+            flex: 0 0 auto;
+            width: auto;
+            min-width: 58px;
+            padding: 9px 11px;
+            border: 0;
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: 800;
+            color: #fff;
+            background: rgba(255, 255, 255, 0.18);
+            pointer-events: auto;
         }
 
         #bottom-panel {
@@ -101,6 +156,7 @@
             font-size: 15px;
             line-height: 1.5;
             text-align: center;
+            word-break: keep-all;
         }
 
         #crosshair {
@@ -146,12 +202,70 @@
             left: 50% !important;
             transform: translate(-50%, 50%) !important;
             z-index: 100 !important;
-            padding: 16px 24px !important;
+
+            width: min(52vw, 230px) !important;
+            height: 44px !important;
+            padding: 0 16px !important;
+
+            border: 0 !important;
+            border-radius: 999px !important;
+
+            background: #ffe600 !important;
+            color: #111 !important;
+
             font-size: 16px !important;
-            font-weight: bold !important;
-            background: #007aff !important;
-            border-radius: 12px !important;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
+            font-weight: 900 !important;
+            letter-spacing: -0.02em !important;
+
+            box-shadow: 0 5px 16px rgba(0, 0, 0, 0.34) !important;
+            opacity: 1 !important;
+
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+
+            cursor: pointer !important;
+            -webkit-tap-highlight-color: transparent !important;
+            transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease !important;
+        }
+
+        #ARButton:active {
+            transform: translate(-50%, 50%) scale(0.97) !important;
+            background: #ffd400 !important;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.42) !important;
+            opacity: 1 !important;
+        }
+
+        #unsupported-message {
+            position: fixed;
+            inset: 0;
+            z-index: 200;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            background: #000;
+            text-align: center;
+        }
+
+        #unsupported-message .box {
+            max-width: 340px;
+            padding: 24px;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        #unsupported-message h1 {
+            margin: 0 0 12px;
+            font-size: 20px;
+        }
+
+        #unsupported-message p {
+            margin: 0;
+            font-size: 14px;
+            line-height: 1.6;
+            opacity: 0.85;
+            word-break: keep-all;
         }
     </style>
 
@@ -159,20 +273,35 @@
     <script type="importmap">
     {
       "imports": {
-        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        "three": "https://unpkg.com/three@0.185.1/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.185.1/examples/jsm/"
       }
     }
-  </script>
+    </script>
 </head>
 
 <body>
     <div id="crosshair"></div>
 
+    <div id="unsupported-message">
+        <div class="box">
+            <h1>AR 실행이 어려운 환경입니다</h1>
+            <p>
+                이 기능은 WebXR AR을 지원하는 모바일 브라우저에서 사용할 수 있습니다.<br>
+                Android Chrome에서 다시 시도해 주세요.
+            </p>
+        </div>
+    </div>
+
     <div id="ui-layer">
         <div id="top-panel">
-            <div id="step-title">AR 준비</div>
-            <div id="guide-text">아래 [START AR] 버튼을 눌러 카메라와 바닥 인식을 시작하세요.</div>
+            <div id="top-row">
+                <div>
+                    <div id="step-title">AR 준비</div>
+                    <div id="product-name"></div>
+                </div>
+                <button type="button" id="close-btn">닫기</button>
+            </div>
         </div>
 
         <div id="bottom-panel" style="display: none;">
@@ -195,10 +324,24 @@
         const actionBtn = document.getElementById('action-btn');
         const resetBtn = document.getElementById('reset-btn');
         const crosshair = document.getElementById('crosshair');
+        const closeBtn = document.getElementById('close-btn');
+        const productNameEl = document.getElementById('product-name');
+        const unsupportedMessage = document.getElementById('unsupported-message');
+
+        const params = new URLSearchParams(window.location.search);
+
+        const IMAGE_URL = params.get('img') || './assets/fallback.jpg';
+        const PRODUCT_NAME = params.get('name') || '상품 이미지';
+        const PRODUCT_SIZE = params.get('size') || '';
+        const RETURN_URL = getSafeReturnUrl(params.get('returnUrl') || '');
+
+        renderProductName(PRODUCT_NAME, PRODUCT_SIZE);
 
         let container, camera, scene, renderer;
         let hitTestSource = null;
         let hitTestSourceRequested = false;
+
+        let closeRequested = false;
 
         // 단계: ready -> wallFloor -> toe -> placeImage -> done
         let step = "ready";
@@ -207,44 +350,210 @@
         let wallFloorMesh = null;
         let toeMesh = null;
         let lineMesh = null;
-        let imagePlane = null;
+        let productDisplayGroup = null;
+
+        // 실제 공간의 깊이값을 먼저 depth buffer에 기록해
+        // 가까운 현실 물체가 가상 상품을 가리도록 하는 오클루전 메시.
+        let depthOcclusionMesh = null;
+        let depthSensingState = "idle";
 
         let lineProgress = 0;
         let isAnimatingLine = false;
-        let savedDistanceText = ""; // 거리 결과값 저장용
+        let savedDistanceText = "";
 
+<<<<<<< HEAD
         // 이미지 스펙 (40cm * 50cm -> 0.4m * 0.5m)
         const TARGET_IMAGE_WIDTH_M = 0.4;
         const TARGET_IMAGE_HEIGHT_M = 0.5;
         const IMAGE_URL = './assets/roulin.jpg';
+=======
+        const TARGET_IMAGE_WIDTH_M = readMeterParam('w', 0.4);
+        const TARGET_IMAGE_HEIGHT_M = readMeterParam('h', 0.5);
+
+        // 두 번째 상품 사진에는 액자 여백이 포함되어 있으므로
+        // 작품 실측 크기를 기준으로 상하좌우 각각 10cm씩 확장한다.
+        const IMAGE_MARGIN_PER_SIDE_M = 0.1;
+        const RENDER_IMAGE_WIDTH_M = TARGET_IMAGE_WIDTH_M + (IMAGE_MARGIN_PER_SIDE_M * 2);
+        const RENDER_IMAGE_HEIGHT_M = TARGET_IMAGE_HEIGHT_M + (IMAGE_MARGIN_PER_SIDE_M * 2);
+
+        // 렌더링 이미지 뒤에 붙는 입체 본체의 깊이.
+        // 앞면 이미지는 별도의 PlaneGeometry로 유지한다.
+        const FRAME_DEPTH_M = 0.04;
+        const FRAME_BODY_COLOR = 0x8d7756;
+        const FRONT_IMAGE_OFFSET_M = 0.001;
+
+        function readMeterParam(name, fallback) {
+            const value = parseFloat(params.get(name));
+
+            if (!Number.isFinite(value) || value <= 0) {
+                return fallback;
+            }
+
+            return Math.min(Math.max(value, 0.05), 3);
+        }
+
+        function renderProductName(name, sizeText) {
+            var cleanName = (name || '상품 이미지').trim();
+            var cleanSizeText = (sizeText || '').trim();
+
+            var parts = cleanName
+                .split('/')
+                .map(function (part) {
+                    return part.replace(/\s+/g, ' ').trim();
+                })
+                .filter(Boolean);
+
+            productNameEl.innerHTML = '';
+
+            if (parts.length >= 2) {
+                var artistEl = document.createElement('div');
+                artistEl.className = 'ar-product-artist';
+                artistEl.textContent = parts[0];
+
+                var titleEl = document.createElement('div');
+                titleEl.className = 'ar-product-title';
+                titleEl.textContent = parts.slice(1).join(' / ');
+
+                productNameEl.appendChild(artistEl);
+                productNameEl.appendChild(titleEl);
+            } else {
+                var nameEl = document.createElement('div');
+                nameEl.className = 'ar-product-title';
+                nameEl.textContent = cleanName;
+
+                productNameEl.appendChild(nameEl);
+            }
+
+            if (cleanSizeText) {
+                var sizeEl = document.createElement('div');
+                sizeEl.className = 'ar-product-size';
+                sizeEl.textContent = cleanSizeText;
+
+                productNameEl.appendChild(sizeEl);
+            }
+        }
+
+        function getSafeReturnUrl(rawUrl) {
+            if (!rawUrl) return '';
+
+            try {
+                const url = new URL(rawUrl, window.location.origin);
+
+                // 외부 사이트로 튀는 것을 막기 위해 같은 도메인만 허용
+                if (url.origin !== window.location.origin) {
+                    return '';
+                }
+
+                return url.href;
+            } catch (e) {
+                return '';
+            }
+        }
+
+        function goBackToProductPage() {
+            if (history.length > 1) {
+                history.back();
+                return;
+            }
+
+            if (RETURN_URL) {
+                window.location.replace(RETURN_URL);
+                return;
+            }
+
+            if (document.referrer) {
+                try {
+                    const referrerUrl = new URL(document.referrer);
+
+                    if (referrerUrl.origin === window.location.origin) {
+                        window.location.replace(document.referrer);
+                        return;
+                    }
+                } catch (e) {
+                    // referrer 파싱 실패 시 fallback
+                }
+            }
+
+            window.location.replace('/product/list.html');
+        }
+>>>>>>> be101da (feat: updated)
 
         init();
 
         function init() {
+            closeBtn.addEventListener('click', function () {
+                closeRequested = true;
+
+                if (renderer && renderer.xr && renderer.xr.isPresenting) {
+                    const session = renderer.xr.getSession();
+
+                    if (session) {
+                        session.end();
+                        return;
+                    }
+                }
+
+                goBackToProductPage();
+            });
+
             container = document.createElement('div');
             document.body.appendChild(container);
 
             scene = new THREE.Scene();
             camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
 
-            const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 3);
-            light.position.set(0.5, 1, 0.25);
-            scene.add(light);
+            renderer = new THREE.WebGLRenderer({
+                antialias: true,
+                alpha: true
+            });
 
-            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            // 상품 이미지를 원본 sRGB 색상에 가깝게 출력한다.
+            renderer.outputColorSpace = THREE.SRGBColorSpace;
+
             renderer.setPixelRatio(window.devicePixelRatio);
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.xr.enabled = true;
             container.appendChild(renderer.domElement);
 
+            if (!navigator.xr) {
+                unsupportedMessage.style.display = 'flex';
+                return;
+            }
+
             const arButton = ARButton.createButton(renderer, {
                 requiredFeatures: ['hit-test'],
-                optionalFeatures: ['dom-overlay'],
-                domOverlay: { root: document.body }
+                optionalFeatures: [
+                    'dom-overlay',
+                    'depth-sensing'
+                ],
+
+                // Three.js의 내장 깊이 오클루전은 GPU depth texture를 사용한다.
+                // 지원되지 않는 기기에서는 선택 기능이므로 기존 AR로 자동 폴백된다.
+                depthSensing: {
+                    usagePreference: ['gpu-optimized'],
+                    dataFormatPreference: ['float32', 'luminance-alpha']
+                },
+
+                domOverlay: {
+                    root: document.body
+                }
             });
+
+            // START AR 기본 문구가 잠깐 보이지 않도록 먼저 숨김
+            arButton.style.visibility = 'hidden';
+
             document.body.appendChild(arButton);
 
+            function setARButtonLabel() {
+                arButton.textContent = '시작하기';
+                arButton.style.visibility = 'visible';
+            }
+
+            // ARButton 내부에서 기본 문구를 세팅한 뒤 한글 문구로 교체
+            setTimeout(setARButtonLabel, 300);
+
             renderer.xr.addEventListener('sessionstart', () => {
+<<<<<<< HEAD
                 // AR 시작 후 Three.js가 버튼을 STOP AR로 바꾸기 때문에 숨김 처리
                 arButton.style.display = 'none';
                 arButton.style.pointerEvents = 'none';
@@ -252,11 +561,32 @@
                 // AR 시작 후에만 조준점 표시
                 crosshair.style.display = 'block';
 
+=======
+                arButton.style.setProperty('display', 'none', 'important');
+                arButton.style.setProperty('visibility', 'hidden', 'important');
+                arButton.style.setProperty('pointer-events', 'none', 'important');
+
+                crosshair.style.display = 'block';
+>>>>>>> be101da (feat: updated)
                 uiBottom.style.display = 'block';
+
+                depthSensingState = "pending";
+
+                const session = renderer.xr.getSession();
+                const enabledFeatures = session && session.enabledFeatures
+                    ? Array.from(session.enabledFeatures)
+                    : [];
+
+                if (enabledFeatures.length > 0 && !enabledFeatures.includes('depth-sensing')) {
+                    depthSensingState = "unsupported";
+                    console.info('[AR] 이 기기에서는 깊이 오클루전을 지원하지 않습니다. 기존 AR로 실행합니다.');
+                }
+
                 setStep("wallFloor");
             });
 
             renderer.xr.addEventListener('sessionend', () => {
+<<<<<<< HEAD
                 // AR 세션이 종료되면 다시 시작할 수 있도록 START AR 버튼 복구
                 arButton.style.display = '';
                 arButton.style.pointerEvents = '';
@@ -264,8 +594,25 @@
                 // AR 종료 시 조준점 숨김
                 crosshair.style.display = 'none';
 
+=======
+                arButton.style.removeProperty('display');
+                arButton.style.removeProperty('visibility');
+                arButton.style.removeProperty('pointer-events');
+
+                setTimeout(setARButtonLabel, 100);
+
+                crosshair.style.display = 'none';
+>>>>>>> be101da (feat: updated)
                 uiBottom.style.display = 'none';
+
+                removeDepthOcclusionMesh();
+                depthSensingState = "idle";
+
                 resetMeasurement();
+
+                if (closeRequested) {
+                    goBackToProductPage();
+                }
             });
 
             renderer.setAnimationLoop(render);
@@ -275,37 +622,51 @@
             resetBtn.addEventListener('click', resetMeasurement);
         }
 
+        function setGuideText(text) {
+            if (!guideText) return;
+
+            guideText.textContent = text;
+        }
+
         function setStep(nextStep) {
             step = nextStep;
+
             if (step === "wallFloor") {
                 stepTitle.textContent = "1단계: 벽/바닥선";
                 stepTitle.style.color = "#00d4ff";
                 crosshair.style.borderColor = "#00d4ff";
-                guideText.textContent = "벽면과 바닥이 만나는 모서리 지점을 조준점에 맞추고 버튼을 누르세요.";
+
+                setGuideText = "벽면과 바닥이 만나는 모서리 지점을 조준점에 맞추고 버튼을 누르세요.";
                 actionBtn.textContent = "벽/바닥선 확정";
                 actionBtn.style.background = "#00d4ff";
                 actionBtn.style.color = "#fff";
+
             } else if (step === "toe") {
                 stepTitle.textContent = "2단계: 사용자의 발끝";
                 stepTitle.style.color = "#ffe600";
                 crosshair.style.borderColor = "#ffe600";
-                guideText.textContent = "이제 한 걸음 물러선 대상의 발끝 지점을 조준점에 맞추고 버튼을 누르세요.";
+
+                setGuideText = "이제 한 걸음 물러선 대상의 발끝 지점을 조준점에 맞추고 버튼을 누르세요.";
                 actionBtn.textContent = "발끝 확정";
                 actionBtn.style.background = "#ffe600";
                 actionBtn.style.color = "#000";
+
             } else if (step === "placeImage") {
                 stepTitle.textContent = "3단계: 벽면 이미지 배치";
                 stepTitle.style.color = "#ff00ff";
                 crosshair.style.borderColor = "#ff00ff";
-                guideText.textContent = "정면(벽면 높이)을 유저의 눈높이로 조준하고 버튼을 눌러 이미지를 부착하세요.";
+
+                setGuideText = "정면 벽면 높이를 유저의 눈높이로 조준하고 버튼을 눌러 이미지를 부착하세요.";
                 actionBtn.textContent = "여기에 이미지 부착";
                 actionBtn.style.background = "#ff00ff";
                 actionBtn.style.color = "#fff";
+
             } else if (step === "done") {
-                stepTitle.textContent = "모든 배치 완료";
+                stepTitle.textContent = "배치 완료";
                 stepTitle.style.color = "#00ff66";
                 crosshair.style.borderColor = "#fff";
-                guideText.textContent = "줄자와 이미지가 고정되었습니다. 자유롭게 확인해 보세요.";
+
+                setGuideText = "줄자와 상품 이미지가 고정되었습니다. 자유롭게 확인해 보세요.";
                 actionBtn.textContent = "완료됨";
                 actionBtn.style.background = "#374151";
                 actionBtn.style.color = "#fff";
@@ -313,9 +674,9 @@
         }
 
         function onActionTriggered() {
-            // 3단계(이미지 배치)일 때는 실시간 hitMatrix 맵핑이 안 되어 있어도 패스하도록 방어 조건 수정
             if (!currentHitMatrix && step !== "placeImage") {
                 resultEl.innerHTML = `
+<<<<<<< HEAD
         <span style="color:#ffcc00; font-weight:800;">
             아직 평면을 인식하지 못했습니다.
         </span><br>
@@ -323,6 +684,15 @@
             벽과 바닥이 만나는 부분을 천천히 비춰주세요.
         </span>
     `;
+=======
+                    <span style="color:#ffcc00; font-weight:800;">
+                        아직 평면을 인식하지 못했습니다.
+                    </span><br>
+                    <span style="font-size:0.95em;">
+                        벽과 바닥이 만나는 부분을 천천히 비춰주세요.
+                    </span>
+                `;
+>>>>>>> be101da (feat: updated)
 
                 actionBtn.style.opacity = "0.75";
 
@@ -336,9 +706,14 @@
             const geometry = new THREE.SphereGeometry(0.02, 32, 32);
 
             if (step === "wallFloor") {
-                const material = new THREE.MeshStandardMaterial({ color: 0x00d4ff });
+                const material = new THREE.MeshBasicMaterial({
+                    color: 0x00d4ff
+                });
+
                 wallFloorMesh = new THREE.Mesh(geometry, material);
-                wallFloorMesh.position.setFromMatrixPosition(new THREE.Matrix4().fromArray(currentHitMatrix));
+                wallFloorMesh.position.setFromMatrixPosition(
+                    new THREE.Matrix4().fromArray(currentHitMatrix)
+                );
                 wallFloorMesh.scale.set(0, 0, 0);
                 scene.add(wallFloorMesh);
 
@@ -346,74 +721,285 @@
                 setStep("toe");
 
             } else if (step === "toe") {
-                const material = new THREE.MeshStandardMaterial({ color: 0xffe600 });
+                const material = new THREE.MeshBasicMaterial({
+                    color: 0xffe600
+                });
+
                 toeMesh = new THREE.Mesh(geometry, material);
-                toeMesh.position.setFromMatrixPosition(new THREE.Matrix4().fromArray(currentHitMatrix));
+                toeMesh.position.setFromMatrixPosition(
+                    new THREE.Matrix4().fromArray(currentHitMatrix)
+                );
                 toeMesh.scale.set(0, 0, 0);
                 scene.add(toeMesh);
 
-                // 줄자 애니메이션 선 초기화
                 const lineGeometry = new THREE.BufferGeometry();
-                const lineMaterial = new THREE.LineBasicMaterial({ color: 0x00ff66, linewidth: 5 });
+                const lineMaterial = new THREE.LineBasicMaterial({
+                    color: 0x00ff66,
+                    linewidth: 5
+                });
+
                 lineMesh = new THREE.Line(lineGeometry, lineMaterial);
                 scene.add(lineMesh);
 
                 lineProgress = 0;
                 isAnimatingLine = true;
 
-                // 거리 계산 및 고정 텍스트 저장
                 const distanceInMeters = wallFloorMesh.position.distanceTo(toeMesh.position);
                 const distanceInCm = Math.round(distanceInMeters * 100);
-                savedDistanceText = `<span style="font-size:1.2em; color:#ffe600; font-weight:bold;">★ 벽 ↔ 발끝 거리: ${distanceInCm}cm</span>`;
 
-                resultEl.innerHTML = savedDistanceText + "<br><span style='color:#ff00ff;'>원하는 벽면 높이(정면)를 바라보고 버튼을 누르세요!</span>";
+                savedDistanceText =
+                    `<span style="font-size:1.2em; color:#ffe600; font-weight:bold;">★ 벽 ↔ 발끝 거리: ${distanceInCm}cm</span>`;
+
+                resultEl.innerHTML =
+                    savedDistanceText +
+                    "<br><span style='color:#ff00ff;'>원하는 벽면 높이, 즉 정면을 바라보고 버튼을 누르세요!</span>";
+
                 setStep("placeImage");
 
             } else if (step === "placeImage") {
-                // 3단계: 이제 센서가 정면 평면을 인식하든 못하든 100% 무조건 실행됩니다.
-                const textureLoader = new THREE.TextureLoader();
-                textureLoader.load(IMAGE_URL, (texture) => {
-                    const imageGeometry = new THREE.PlaneGeometry(TARGET_IMAGE_WIDTH_M, TARGET_IMAGE_HEIGHT_M);
-                    const imageMaterial = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
-                    imagePlane = new THREE.Mesh(imageGeometry, imageMaterial);
+                placeProductImage();
 
-                    // 1. 이미 검증된 1단계 '벽/바닥선 모서리'의 X, Z 평면 좌표를 그대로 계승합니다.
-                    imagePlane.position.copy(wallFloorMesh.position);
-
-                    // 2. 높이(Y축)는 버튼을 누르는 순간 유저가 폰을 들고 있는 눈높이(camera.position.y)로 강제 고정합니다.
-                    imagePlane.position.y = camera.position.y;
-
-                    // 3. 실제 벽면에 파묻히는 Z-fighting 현상을 방지하기 위해 사용자가 서 있는 쪽 방향으로 미세하게 당겨옵니다.
-                    // 카메라 방향 벡터를 구해서 그 방향으로 0.01m(1cm) 앞으로 나오게 계산합니다.
-                    const forward = new THREE.Vector3();
-                    camera.getWorldDirection(forward);
-                    forward.y = 0; // 수평축으로만 이동 유도
-                    forward.normalize();
-                    imagePlane.position.addScaledVector(forward, -0.01); // 카메라 반대(벽 앞면) 방향 보정
-
-                    // 4. 이미지가 유저(카메라)를 똑바로 바라볼 수 있도록 회전축을 강제 정렬합니다.
-                    imagePlane.lookAt(camera.position.x, imagePlane.position.y, camera.position.z);
-
-                    scene.add(imagePlane);
-
-                    resultEl.innerHTML = savedDistanceText + "<br><span style='color:#00ff66;'>가상 수직 평면에 이미지 배치 완료!</span>";
-                    setStep("done");
-                });
+            } else if (step === "done") {
+                resultEl.innerHTML =
+                    savedDistanceText +
+                    "<br><span style='color:#00ff66;'>이미 배치가 완료되었습니다. 초기화 후 다시 시도할 수 있습니다.</span>";
             }
         }
 
+        function placeProductImage() {
+            if (!wallFloorMesh) {
+                resultEl.innerHTML = `
+                    <span style="color:#ffcc00; font-weight:800;">
+                        기준점이 없습니다.
+                    </span><br>
+                    처음부터 다시 진행해 주세요.
+                `;
+                return;
+            }
+
+            actionBtn.disabled = true;
+            actionBtn.style.opacity = "0.75";
+            resultEl.innerHTML =
+                savedDistanceText +
+                "<br><span style='color:#ff00ff;'>상품 이미지를 불러오는 중입니다...</span>";
+
+            const textureLoader = new THREE.TextureLoader();
+
+            textureLoader.setCrossOrigin('anonymous');
+
+            textureLoader.load(
+                IMAGE_URL,
+                (texture) => {
+                    // 일반 상품 이미지는 sRGB 기준으로 해석해야 원본 색과 가깝게 보인다.
+                    texture.colorSpace = THREE.SRGBColorSpace;
+
+                    // 앞면 이미지와 두께 본체를 하나의 그룹으로 묶는다.
+                    productDisplayGroup = new THREE.Group();
+
+                    // 두께용 본체. 그룹의 원점을 앞면 기준으로 사용하기 위해
+                    // 본체 중심을 뒤쪽(-Z)으로 절반만큼 이동한다.
+                    const frameBodyGeometry = new THREE.BoxGeometry(
+                        RENDER_IMAGE_WIDTH_M,
+                        RENDER_IMAGE_HEIGHT_M,
+                        FRAME_DEPTH_M
+                    );
+
+                    const frameBodyMaterial = new THREE.MeshBasicMaterial({
+                        color: FRAME_BODY_COLOR,
+                        toneMapped: false
+                    });
+
+                    const frameBodyMesh = new THREE.Mesh(
+                        frameBodyGeometry,
+                        frameBodyMaterial
+                    );
+
+                    frameBodyMesh.position.z = -(FRAME_DEPTH_M / 2);
+                    productDisplayGroup.add(frameBodyMesh);
+
+                    // 상품 사진은 기존처럼 별도의 평면으로 유지한다.
+                    const imageGeometry = new THREE.PlaneGeometry(
+                        RENDER_IMAGE_WIDTH_M,
+                        RENDER_IMAGE_HEIGHT_M
+                    );
+
+                    const imageMaterial = new THREE.MeshBasicMaterial({
+                        map: texture,
+                        side: THREE.FrontSide,
+                        transparent: true,
+
+                        // 주변 광원과 톤 매핑의 영향을 받지 않고 원본 색상을 유지한다.
+                        toneMapped: false
+                    });
+
+                    const frontImageMesh = new THREE.Mesh(
+                        imageGeometry,
+                        imageMaterial
+                    );
+
+                    // Z-fighting 방지를 위해 본체 앞면보다 1mm 앞으로 배치한다.
+                    frontImageMesh.position.z = FRONT_IMAGE_OFFSET_M;
+                    productDisplayGroup.add(frontImageMesh);
+
+                    productDisplayGroup.position.copy(wallFloorMesh.position);
+                    productDisplayGroup.position.y = camera.position.y;
+
+                    const forward = new THREE.Vector3();
+                    camera.getWorldDirection(forward);
+                    forward.y = 0;
+                    forward.normalize();
+
+                    // 벽 표면에서 카메라 쪽으로 1cm 띄워 겹침을 방지한다.
+                    productDisplayGroup.position.addScaledVector(forward, -0.01);
+
+                    // 그룹의 +Z 앞면이 카메라를 향하도록 회전한다.
+                    productDisplayGroup.lookAt(
+                        camera.position.x,
+                        productDisplayGroup.position.y,
+                        camera.position.z
+                    );
+
+                    scene.add(productDisplayGroup);
+
+                    resultEl.innerHTML =
+                        savedDistanceText +
+                        "<br><span style='color:#00ff66;'>상품 이미지를 벽면에 배치했습니다!</span>";
+
+                    actionBtn.disabled = false;
+                    actionBtn.style.opacity = "1";
+
+                    setStep("done");
+                },
+                undefined,
+                (error) => {
+                    console.error('이미지 로드 실패:', error, IMAGE_URL);
+
+                    resultEl.innerHTML = `
+                        <span style="color:#ffcc00; font-weight:800;">
+                            상품 이미지를 불러오지 못했습니다.
+                        </span><br>
+                        <span style="font-size:0.95em;">
+                            이미지 경로 또는 외부 이미지 접근 권한을 확인해 주세요.
+                        </span>
+                    `;
+
+                    actionBtn.disabled = false;
+                    actionBtn.style.opacity = "1";
+                }
+            );
+        }
+
         function resetMeasurement() {
-            if (wallFloorMesh) { scene.remove(wallFloorMesh); wallFloorMesh = null; }
-            if (toeMesh) { scene.remove(toeMesh); toeMesh = null; }
-            if (lineMesh) { scene.remove(lineMesh); lineMesh = null; }
-            if (imagePlane) { scene.remove(imagePlane); imagePlane = null; }
+            disposeObject(wallFloorMesh);
+            disposeObject(toeMesh);
+            disposeObject(lineMesh);
+            disposeObject(productDisplayGroup);
+
+            wallFloorMesh = null;
+            toeMesh = null;
+            lineMesh = null;
+            productDisplayGroup = null;
 
             isAnimatingLine = false;
             lineProgress = 0;
             savedDistanceText = "";
 
+            actionBtn.disabled = false;
+            actionBtn.style.opacity = "1";
+
             resultEl.textContent = "주변 공간(벽과 바닥)을 천천히 비춰주세요.";
-            if (renderer.xr.isPresenting) setStep("wallFloor");
+
+            if (renderer && renderer.xr && renderer.xr.isPresenting) {
+                setStep("wallFloor");
+            } else {
+                step = "ready";
+            }
+        }
+
+        function disposeObject(object) {
+            if (!object) return;
+
+            scene.remove(object);
+
+            // Group 안의 Box와 Plane까지 모두 순회하며 GPU 자원을 해제한다.
+            object.traverse(function (child) {
+                if (child.geometry) {
+                    child.geometry.dispose();
+                }
+
+                if (child.material) {
+                    if (Array.isArray(child.material)) {
+                        child.material.forEach(disposeMaterial);
+                    } else {
+                        disposeMaterial(child.material);
+                    }
+                }
+            });
+        }
+
+        function disposeMaterial(material) {
+            if (!material) return;
+
+            if (material.map) {
+                material.map.dispose();
+            }
+
+            material.dispose();
+        }
+
+        function updateDepthOcclusion() {
+            if (!renderer || !renderer.xr || !renderer.xr.isPresenting) return;
+            if (depthOcclusionMesh || depthSensingState === "unsupported") return;
+
+            if (!renderer.xr.hasDepthSensing()) return;
+
+            const mesh = renderer.xr.getDepthSensingMesh();
+
+            if (!mesh) return;
+
+            depthOcclusionMesh = mesh;
+            depthSensingState = "active";
+
+            // 이 메시는 화면 전체에 실환경 깊이만 기록한다.
+            // 색상은 쓰지 않고 모든 가상 오브젝트보다 먼저 렌더링한다.
+            depthOcclusionMesh.renderOrder = -10000;
+            depthOcclusionMesh.frustumCulled = false;
+
+            if (depthOcclusionMesh.material) {
+                depthOcclusionMesh.material.colorWrite = false;
+                depthOcclusionMesh.material.depthWrite = true;
+                depthOcclusionMesh.material.depthTest = true;
+                depthOcclusionMesh.material.transparent = false;
+                depthOcclusionMesh.material.blending = THREE.NoBlending;
+            }
+
+            scene.add(depthOcclusionMesh);
+
+            const session = renderer.xr.getSession();
+            console.log(
+                '[AR] 실제 공간 깊이 오클루전 활성화',
+                session ? {
+                    depthUsage: session.depthUsage,
+                    depthDataFormat: session.depthDataFormat,
+                    depthType: session.depthType || null
+                } : {}
+            );
+        }
+
+        function removeDepthOcclusionMesh() {
+            if (!depthOcclusionMesh) return;
+
+            scene.remove(depthOcclusionMesh);
+
+            if (depthOcclusionMesh.geometry) {
+                depthOcclusionMesh.geometry.dispose();
+            }
+
+            if (depthOcclusionMesh.material) {
+                depthOcclusionMesh.material.dispose();
+            }
+
+            depthOcclusionMesh = null;
         }
 
         function onWindowResize() {
@@ -423,21 +1009,32 @@
         }
 
         function render(timestamp, frame) {
-            if (wallFloorMesh && wallFloorMesh.scale.x < 1) wallFloorMesh.scale.addScalar(0.08);
-            if (toeMesh && toeMesh.scale.x < 1) toeMesh.scale.addScalar(0.08);
+            if (wallFloorMesh && wallFloorMesh.scale.x < 1) {
+                wallFloorMesh.scale.addScalar(0.08);
+            }
+
+            if (toeMesh && toeMesh.scale.x < 1) {
+                toeMesh.scale.addScalar(0.08);
+            }
 
             if (isAnimatingLine && wallFloorMesh && toeMesh && lineMesh) {
                 lineProgress += 0.05;
+
                 if (lineProgress >= 1) {
                     lineProgress = 1;
                     isAnimatingLine = false;
                 }
+
                 const currentLineEnd = new THREE.Vector3().lerpVectors(
                     wallFloorMesh.position,
                     toeMesh.position,
                     lineProgress
                 );
-                lineMesh.geometry.setFromPoints([wallFloorMesh.position, currentLineEnd]);
+
+                lineMesh.geometry.setFromPoints([
+                    wallFloorMesh.position,
+                    currentLineEnd
+                ]);
             }
 
             if (frame) {
@@ -446,38 +1043,61 @@
 
                 if (hitTestSourceRequested === false) {
                     session.requestReferenceSpace('viewer').then((viewerSpace) => {
-                        session.requestHitTestSource({ space: viewerSpace }).then((source) => {
+                        session.requestHitTestSource({
+                            space: viewerSpace
+                        }).then((source) => {
                             hitTestSource = source;
                         });
                     });
-                    session.addEventListener('end', () => { hitTestSourceRequested = false; hitTestSource = null; });
+
+                    session.addEventListener('end', () => {
+                        hitTestSourceRequested = false;
+                        hitTestSource = null;
+                    });
+
                     hitTestSourceRequested = true;
                 }
 
                 if (hitTestSource) {
                     const hitTestResults = frame.getHitTestResults(hitTestSource);
+
                     if (hitTestResults.length > 0) {
                         const hit = hitTestResults[0];
                         currentHitMatrix = hit.getPose(referenceSpace).transform.matrix;
 
+<<<<<<< HEAD
                         // [수정] 3단계(placeImage) 상태일 때는 센서 성공 여부 문구로 UI를 덮어쓰지 않고 안내 고정
+=======
+>>>>>>> be101da (feat: updated)
                         if (step !== "done" && step !== "placeImage") {
                             resultEl.textContent = "공간 인식 성공! 확정 버튼을 누르세요.";
                         } else if (step === "placeImage") {
-                            resultEl.innerHTML = savedDistanceText + "<br><span style='color:#ff00ff;'>원하는 벽면 높이(정면)를 바라보고 버튼을 누르세요!</span>";
+                            resultEl.innerHTML =
+                                savedDistanceText +
+                                "<br><span style='color:#ff00ff;'>원하는 벽면 높이, 즉 정면을 바라보고 버튼을 누르세요!</span>";
                         }
+
                     } else {
                         currentHitMatrix = null;
 
+<<<<<<< HEAD
                         // [수정] 3단계일 때는 센서가 실패하더라도 '평면 탐색 중' 문구를 띄우지 않고 버튼 클릭 유도
+=======
+>>>>>>> be101da (feat: updated)
                         if (step === "placeImage") {
-                            resultEl.innerHTML = savedDistanceText + "<br><span style='color:#ff00ff;'>원하는 벽면 높이(정면)를 바라보고 버튼을 누르세요!</span>";
+                            resultEl.innerHTML =
+                                savedDistanceText +
+                                "<br><span style='color:#ff00ff;'>원하는 벽면 높이, 즉 정면을 바라보고 버튼을 누르세요!</span>";
                         } else if (step !== "done") {
                             resultEl.textContent = "평면을 탐색 중입니다...";
                         }
                     }
                 }
             }
+
+            // Three.js 내부에서 현재 XR frame의 depth texture가 준비된 뒤
+            // 오클루전 메시를 장면에 한 번만 추가한다.
+            updateDepthOcclusion();
 
             renderer.render(scene, camera);
         }
