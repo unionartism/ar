@@ -1474,6 +1474,20 @@
             contentRoot.add(lineMesh);
         }
 
+        function setMeasurementGuidesVisible(visible) {
+            if (wallFloorMesh) {
+                wallFloorMesh.visible = visible;
+            }
+
+            if (toeMesh) {
+                toeMesh.visible = visible;
+            }
+
+            if (lineMesh) {
+                lineMesh.visible = visible;
+            }
+        }
+
         function getScreenCenterWallPlacement() {
             if (!wallFloorMesh || !toeMesh || !renderer?.xr?.isPresenting) {
                 return {
@@ -1726,6 +1740,9 @@
                         .addScaledVector(wallNormal, WALL_FRONT_OFFSET_M);
 
                     contentRoot.add(productDisplayGroup);
+
+                    // 배치가 끝나면 기준점과 바닥 거리선을 숨긴다.
+                    setMeasurementGuidesVisible(false);
 
                     isLoadingProductImage = false;
                     guideMessageLockUntil = 0;
