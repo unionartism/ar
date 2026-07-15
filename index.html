@@ -671,8 +671,6 @@
         let depthOcclusionMesh = null;
         let depthSensingState = 'idle';
 
-        let lineProgress = 0;
-        let isAnimatingLine = false;
         let savedDistanceText = '';
         let productLoadToken = 0;
         let isLoadingProductImage = false;
@@ -1363,9 +1361,6 @@
 
                 createMeasurementLine();
 
-                lineProgress = 0;
-                isAnimatingLine = true;
-
                 const distanceInCm = Math.round(distanceInMeters * 100);
 
                 savedDistanceText =
@@ -1398,9 +1393,9 @@
                 wallFloorMesh.position.x,
                 wallFloorMesh.position.y,
                 wallFloorMesh.position.z,
-                wallFloorMesh.position.x,
-                wallFloorMesh.position.y,
-                wallFloorMesh.position.z
+                toeMesh.position.x,
+                toeMesh.position.y,
+                toeMesh.position.z
             ]);
 
             const lineMaterial = new LineMaterial({
@@ -1411,7 +1406,6 @@
 
             lineMesh = new Line2(lineGeometry, lineMaterial);
             lineMesh.frustumCulled = false;
-            lineMesh.computeLineDistances();
             contentRoot.add(lineMesh);
         }
 
@@ -1736,8 +1730,6 @@
             currentViewerPoseAvailable = false;
             currentViewerPoseEmulated = false;
 
-            isAnimatingLine = false;
-            lineProgress = 0;
             savedDistanceText = '';
             currentHitMatrix = null;
             lastPlaneDetectedAt = 0;
@@ -1856,20 +1848,6 @@
             // 이 시점부터 해당 로컬 좌표는 변경하지 않지만, 실제 공간과의
             // 연결을 유지하기 위해 Anchor 자체는 세션 종료까지 보존한다.
             spatialLockFinalized = true;
-            isAnimatingLine = false;
-
-            if (lineMesh && wallFloorMesh && toeMesh) {
-                lineProgress = 1;
-                lineMesh.geometry.setPositions([
-                    wallFloorMesh.position.x,
-                    wallFloorMesh.position.y,
-                    wallFloorMesh.position.z,
-                    toeMesh.position.x,
-                    toeMesh.position.y,
-                    toeMesh.position.z
-                ]);
-                lineMesh.computeLineDistances();
-            }
 
             console.info(
                 worldAnchor
@@ -2512,30 +2490,6 @@
             marker.scale.setScalar(nextScale);
         }
 
-        function updateMeasurementLine() {
-            if (!isAnimatingLine || !wallFloorMesh || !toeMesh || !lineMesh) return;
-
-            lineProgress = Math.min(1, lineProgress + 0.05);
-
-            if (lineProgress >= 1) {
-                isAnimatingLine = false;
-            }
-
-            const currentLineEnd = new THREE.Vector3().lerpVectors(
-                wallFloorMesh.position,
-                toeMesh.position,
-                lineProgress
-            );
-
-            lineMesh.geometry.setPositions([
-                wallFloorMesh.position.x,
-                wallFloorMesh.position.y,
-                wallFloorMesh.position.z,
-                currentLineEnd.x,
-                currentLineEnd.y,
-                currentLineEnd.z
-            ]);
-        }
         function updateHitTest(frame) {
             const referenceSpace = renderer.xr.getReferenceSpace();
             const session = renderer.xr.getSession();
@@ -2655,7 +2609,6 @@
 
             animateMarkerScale(wallFloorMesh);
             animateMarkerScale(toeMesh);
-            updateMeasurementLine();
 
             if (ENABLE_DEPTH_OCCLUSION) {
                 updateDepthOcclusion();
