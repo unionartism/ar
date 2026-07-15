@@ -108,10 +108,42 @@
             opacity: 0.92;
             word-break: keep-all;
             pointer-events: none;
+            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.95);
             transition:
                 top 0.25s ease,
                 opacity 0.2s ease,
-                transform 0.25s ease;
+                transform 0.25s ease,
+                visibility 0.2s ease;
+        }
+
+        #guide-text.is-hidden {
+            opacity: 0;
+            visibility: hidden;
+            transform: translate(-50%, -8px);
+        }
+
+        #guide-text .guide-distance {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 17px;
+            line-height: 1.35;
+            font-weight: 900;
+            color: #ffe600;
+        }
+
+        #guide-text .guide-warning {
+            color: #ffcc00;
+            font-weight: 800;
+        }
+
+        #guide-text .guide-info {
+            color: #00d4ff;
+            font-weight: 800;
+        }
+
+        #guide-text .guide-accent {
+            color: #ff66ff;
+            font-weight: 800;
         }
 
         /* 스캔 큐브 아래에서는 큐브 높이만큼 안내 문구를 더 내려준다. */
@@ -136,15 +168,16 @@
         #bottom-panel {
             padding: 15px;
             padding-bottom: calc(15px + env(safe-area-inset-bottom, 0));
-            background: rgba(0, 0, 0, 0.8);
-            backdrop-filter: blur(10px);
+            background: transparent;
+            backdrop-filter: none;
+            -webkit-backdrop-filter: none;
             pointer-events: auto;
         }
 
         .row {
             display: flex;
             gap: 10px;
-            margin-top: 10px;
+            margin-top: 0;
         }
 
         button {
@@ -172,16 +205,6 @@
 
         button:active:not(:disabled) {
             transform: scale(0.98);
-        }
-
-        #result {
-            padding: 12px;
-            border-radius: 8px;
-            background: rgba(255, 255, 255, 0.1);
-            font-size: 15px;
-            line-height: 1.5;
-            text-align: center;
-            word-break: keep-all;
         }
 
         #crosshair {
@@ -558,7 +581,6 @@
         </div>
 
         <div id="bottom-panel" style="display: none;">
-            <div id="result">주변 공간(벽과 바닥)을 천천히 비춰주세요.</div>
             <div class="row">
                 <button type="button" id="action-btn">1단계: 벽/바닥선 확정</button>
                 <button type="button" id="reset-btn" class="danger">초기화</button>
@@ -576,7 +598,6 @@
         const uiBottom = document.getElementById('bottom-panel');
         const stepTitle = document.getElementById('step-title');
         const guideText = document.getElementById('guide-text');
-        const resultEl = document.getElementById('result');
         const actionBtn = document.getElementById('action-btn');
         const resetBtn = document.getElementById('reset-btn');
         const crosshair = document.getElementById('crosshair');
@@ -674,7 +695,7 @@
         let savedDistanceText = '';
         let productLoadToken = 0;
         let isLoadingProductImage = false;
-        let resultMessageLockUntil = 0;
+        let guideMessageLockUntil = 0;
 
         const TARGET_IMAGE_WIDTH_M = readMeterParam('w', 0.4);
         const TARGET_IMAGE_HEIGHT_M = readMeterParam('h', 0.5);
@@ -1071,16 +1092,78 @@
             }
         }
 
-        function setGuideText(text) {
-            guideText.textContent = text;
+        function shouldHideGuideForCompletedPlacement() {
+            return renderer?.xr?.isPresenting === true && step === 'done';
         }
 
-        function updateGuideForCurrentState() {
+        function showGuide() {
+            if (shouldHideGuideForCompletedPlacement()) {
+                return false;
+            }
+
+            guideText.classList.remove('is-hidden');
+            guideText.setAttribute('aria-hidden', 'false');
+            return true;
+        }
+
+        function hideGuide() {
+            guideText.classList.add('is-hidden');
+            guideText.setAttribute('aria-hidden', 'true');
+            guideText.replaceChildren();
+        }
+
+        function setGuideText(text) {
+            if (!showGuide()) return false;
+
+            if (
+                guideText.childElementCount === 0 &&
+                guideText.textContent === text
+            ) {
+                return true;
+            }
+
+            guideText.textContent = text;
+            return true;
+        }
+
+        function setGuideHtml(html) {
+            if (!showGuide()) return false;
+            if (guideText.innerHTML === html) return true;
+
+            guideText.innerHTML = html;
+            return true;
+        }
+
+        function showGuideMessage(html, durationMs = 0) {
+            if (!setGuideHtml(html)) return;
+
+            guideMessageLockUntil = durationMs === Number.POSITIVE_INFINITY
+                ? Number.POSITIVE_INFINITY
+                : performance.now() + Math.max(0, durationMs);
+        }
+
+        function updateGuideForCurrentState(force = false) {
             const isPresenting = renderer?.xr?.isPresenting === true;
+
+            if (isPresenting && step === 'done') {
+                hideGuide();
+                return;
+            }
+
+            if (!force && performance.now() < guideMessageLockUntil) {
+                return;
+            }
+
+            guideMessageLockUntil = 0;
+
             const isScanning =
                 isPresenting &&
                 (step === 'wallFloor' || step === 'toe') &&
                 targetingMode === 'scan';
+            const isHoldingPlane =
+                isPresenting &&
+                (step === 'wallFloor' || step === 'toe') &&
+                targetingMode === 'hold';
 
             guideText.classList.toggle('mode-scan', isScanning);
 
@@ -1090,25 +1173,27 @@
             }
 
             if (isScanning) {
-                setGuideText('휴대폰을 천천히 움직여 공간을 스캔하세요.');
+                setGuideText('휴대폰을 천천히 움직여 주변 공간을 스캔하세요.');
+                return;
+            }
+
+            if (isHoldingPlane) {
+                setGuideText('평면 인식을 잠시 유지하고 있습니다. 조준하던 위치를 다시 비춰 주세요.');
                 return;
             }
 
             if (step === 'wallFloor') {
                 setGuideText(
-                    '벽면과 바닥이 만나는 모서리의 바닥 지점을 조준점에 맞추고 버튼을 누르세요.'
+                    '벽과 바닥이 만나는 지점을 조준점에 맞춘 뒤 버튼을 눌러 주세요.'
                 );
             } else if (step === 'toe') {
                 setGuideText(
-                    '1단계 기준점에서 벽과 직각 방향으로 한 걸음 물러선 사용자의 발끝을 조준점에 맞추고 버튼을 누르세요.'
+                    '기준점에서 벽과 직각 방향으로 물러선 뒤, 사용자의 발끝을 조준점에 맞춰 주세요.'
                 );
             } else if (step === 'placeImage') {
-                setGuideText(
-                    '기준점의 수직 위를 화면 중앙에 맞춘 뒤, 휴대폰을 위아래로 기울여 원하는 높이에서 버튼을 누르세요.'
-                );
-            } else if (step === 'done') {
-                setGuideText(
-                    '줄자와 상품 이미지가 고정되었습니다. 자유롭게 이동하며 확인해 보세요.'
+                setGuideHtml(
+                    savedDistanceText +
+                    '<span>휴대폰을 위아래로 기울여 원하는 높이에서 버튼을 눌러 주세요.</span>'
                 );
             }
         }
@@ -1135,19 +1220,22 @@
         }
 
         function setTargetingMode(nextMode) {
+            const modeChanged = targetingMode !== nextMode;
             targetingMode = nextMode;
 
-            const showScan = nextMode === 'scan';
-            const showCrosshair =
-                nextMode === 'crosshair' ||
-                nextMode === 'hold';
+            if (modeChanged) {
+                const showScan = nextMode === 'scan';
+                const showCrosshair =
+                    nextMode === 'crosshair' ||
+                    nextMode === 'hold';
 
-            scanGuide.classList.toggle('is-visible', showScan);
-            scanGuide.setAttribute('aria-hidden', showScan ? 'false' : 'true');
+                scanGuide.classList.toggle('is-visible', showScan);
+                scanGuide.setAttribute('aria-hidden', showScan ? 'false' : 'true');
 
-            crosshair.classList.toggle('is-visible', showCrosshair);
-            crosshair.classList.toggle('is-hold', nextMode === 'hold');
-            crosshair.setAttribute('aria-hidden', showCrosshair ? 'false' : 'true');
+                crosshair.classList.toggle('is-visible', showCrosshair);
+                crosshair.classList.toggle('is-hold', nextMode === 'hold');
+                crosshair.setAttribute('aria-hidden', showCrosshair ? 'false' : 'true');
+            }
 
             updateGuideForCurrentState();
         }
@@ -1264,16 +1352,10 @@
             const hitRequiredSteps = ['wallFloor', 'toe'];
 
             if (hitRequiredSteps.includes(step) && !currentHitMatrix) {
-                resultEl.innerHTML = `
-                    <span style="color:#ffcc00; font-weight:800;">
-                        아직 바닥 평면을 인식하지 못했습니다.
-                    </span><br>
-                    <span style="font-size:0.95em;">
-                        조준할 바닥 위치를 천천히 비춘 뒤 다시 시도해 주세요.
-                    </span>
-                `;
-
-                resultMessageLockUntil = performance.now() + 1500;
+                showGuideMessage(`
+                    <span class="guide-warning">아직 바닥을 인식하지 못했습니다.</span><br>
+                    조준할 위치를 천천히 다시 비춰 주세요.
+                `, 1500);
                 actionBtn.style.opacity = '0.75';
 
                 window.setTimeout(() => {
@@ -1297,15 +1379,10 @@
                 (step === 'wallFloor' || step === 'toe') &&
                 surfaceUpAlignment < SURFACE_VERTICALITY_THRESHOLD
             ) {
-                resultEl.innerHTML = `
-                    <span style="color:#ffcc00; font-weight:800;">
-                        바닥 평면을 조준해 주세요.
-                    </span><br>
-                    <span style="font-size:0.95em;">
-                        거리 측정을 위해 조준점을 바닥에 맞춰야 합니다.
-                    </span>
-                `;
-                resultMessageLockUntil = performance.now() + 1800;
+                showGuideMessage(`
+                    <span class="guide-warning">바닥 평면을 조준해 주세요.</span><br>
+                    거리 측정을 위해 조준점을 바닥에 맞춰야 합니다.
+                `, 1800);
                 return;
             }
 
@@ -1315,12 +1392,10 @@
                 pendingWallFloorSelection = true;
                 actionBtn.disabled = true;
                 actionBtn.style.opacity = '0.75';
-                resultEl.innerHTML = `
-                    <span style="color:#00d4ff; font-weight:800;">
-                        기준점을 실제 공간에 고정하는 중입니다...
-                    </span>
-                `;
-                resultMessageLockUntil = Number.POSITIVE_INFINITY;
+                showGuideMessage(`
+                    <span class="guide-info">기준점을 실제 공간에 고정하는 중입니다.</span><br>
+                    휴대폰을 잠시 안정적으로 유지해 주세요.
+                `, Number.POSITIVE_INFINITY);
 
             } else if (step === 'toe') {
                 const referencePosition = new THREE.Vector3()
@@ -1347,15 +1422,10 @@
                     disposeObject(toeMesh);
                     toeMesh = null;
 
-                    resultEl.innerHTML = `
-                        <span style="color:#ffcc00; font-weight:800;">
-                            기준점과 발끝이 너무 가깝습니다.
-                        </span><br>
-                        <span style="font-size:0.95em;">
-                            기준점에서 벽과 직각 방향으로 조금 더 물러난 발끝을 다시 등록해 주세요.
-                        </span>
-                    `;
-                    resultMessageLockUntil = performance.now() + 2500;
+                    showGuideMessage(`
+                        <span class="guide-warning">기준점과 발끝이 너무 가깝습니다.</span><br>
+                        조금 더 물러난 뒤 발끝을 다시 지정해 주세요.
+                    `, 2500);
                     return;
                 }
 
@@ -1364,26 +1434,21 @@
                 const distanceInCm = Math.round(distanceInMeters * 100);
 
                 savedDistanceText =
-                    `<span style="font-size:1.2em; color:#ffe600; font-weight:bold;">★ 벽 ↔ 발끝 거리: ${distanceInCm}cm</span>`;
+                    `<span class="guide-distance">벽 ↔ 발끝 거리: ${distanceInCm}cm</span>`;
 
                 // 벽 기준점과 발끝의 로컬 좌표를 최종 확정한다.
                 // Anchor는 삭제하지 않고 유지하며, 이후에는 필터링된
                 // Anchor pose만 contentRoot에 적용한다.
                 finalizeSpatialLock();
 
-                resultEl.innerHTML =
-                    savedDistanceText +
-                    '<br><span style="color:#ff00ff;">측정 기준을 고정했습니다. 기준점의 수직 위를 화면 중앙에 맞추고 휴대폰을 위아래로 기울여 높이를 정해 주세요.</span>';
-
+                guideMessageLockUntil = 0;
                 setStep('placeImage');
 
             } else if (step === 'placeImage') {
                 placeProductImage();
 
             } else if (step === 'done') {
-                resultEl.innerHTML =
-                    savedDistanceText +
-                    '<br><span style="color:#00ff66;">이미 배치가 완료되었습니다. 초기화 후 다시 시도할 수 있습니다.</span>';
+                hideGuide();
             }
         }
 
@@ -1541,17 +1606,16 @@
                 placementPosition,
                 wallNormal,
                 cameraPosition,
-                screenCenterIntersection,
-                wasRaisedToFloorLimit:
-                    screenCenterIntersection.y < minimumCenterHeight
+                screenCenterIntersection
             };
         }
 
         function showPlacementCalculationError(message) {
-            resultEl.innerHTML =
+            showGuideMessage(
                 savedDistanceText +
-                `<br><span style="color:#ffcc00; font-weight:800;">${message}</span>`;
-            resultMessageLockUntil = performance.now() + 2500;
+                `<span class="guide-warning">${message}</span>`,
+                2500
+            );
 
             actionBtn.style.opacity = '0.75';
             window.setTimeout(() => {
@@ -1573,17 +1637,17 @@
             // 클릭 순간에 계산한 위치와 방향이 바뀌지 않도록 복사한다.
             const placementPosition = placement.placementPosition.clone();
             const wallNormal = placement.wallNormal.clone();
-            const wasRaisedToFloorLimit = placement.wasRaisedToFloorLimit;
 
             const loadToken = ++productLoadToken;
             isLoadingProductImage = true;
-            resultMessageLockUntil = 0;
 
             actionBtn.disabled = true;
             actionBtn.style.opacity = '0.75';
-            resultEl.innerHTML =
+            showGuideMessage(
                 savedDistanceText +
-                '<br><span style="color:#ff00ff;">상품 이미지를 불러오는 중입니다...</span>';
+                '<span class="guide-accent">상품 이미지를 불러오는 중입니다.</span>',
+                Number.POSITIVE_INFINITY
+            );
 
             const textureLoader = new THREE.TextureLoader();
             textureLoader.setCrossOrigin('anonymous');
@@ -1663,16 +1727,11 @@
 
                     contentRoot.add(productDisplayGroup);
 
-                    resultEl.innerHTML =
-                        savedDistanceText +
-                        (wasRaisedToFloorLimit
-                            ? '<br><span style="color:#00ff66;">상품을 배치했습니다. 이미지가 바닥 아래로 내려가지 않도록 최저 높이가 적용되었습니다.</span>'
-                            : '<br><span style="color:#00ff66;">화면 중앙의 조준 높이에 상품 이미지를 배치했습니다!</span>');
-
                     isLoadingProductImage = false;
-                    resultMessageLockUntil = 0;
+                    guideMessageLockUntil = 0;
                     actionBtn.style.opacity = '1';
                     setStep('done');
+                    hideGuide();
                 },
                 undefined,
                 (error) => {
@@ -1681,16 +1740,10 @@
                     isLoadingProductImage = false;
                     console.error('[AR] 이미지 로드 실패:', error, IMAGE_URL);
 
-                    resultEl.innerHTML = `
-                        <span style="color:#ffcc00; font-weight:800;">
-                            상품 이미지를 불러오지 못했습니다.
-                        </span><br>
-                        <span style="font-size:0.95em;">
-                            이미지 경로와 외부 이미지의 CORS 접근 권한을 확인해 주세요.
-                        </span>
-                    `;
-
-                    resultMessageLockUntil = performance.now() + 4000;
+                    showGuideMessage(`
+                        <span class="guide-warning">상품 이미지를 불러오지 못했습니다.</span><br>
+                        이미지 주소 또는 네트워크 상태를 확인해 주세요.
+                    `, 4000);
                     actionBtn.disabled = false;
                     actionBtn.style.opacity = '1';
                 }
@@ -1701,7 +1754,7 @@
             productLoadToken++;
             anchorRequestToken++;
             isLoadingProductImage = false;
-            resultMessageLockUntil = 0;
+            guideMessageLockUntil = 0;
             pendingWallFloorSelection = false;
             pendingWallFloorWorldMatrix = null;
 
@@ -1736,8 +1789,7 @@
 
             actionBtn.disabled = false;
             actionBtn.style.opacity = '1';
-
-            resultEl.textContent = '주변 공간(벽과 바닥)을 천천히 비춰주세요.';
+            showGuide();
 
             if (renderer?.xr?.isPresenting) {
                 setStep('wallFloor');
@@ -1888,11 +1940,12 @@
 
             actionBtn.disabled = false;
             actionBtn.style.opacity = '1';
-            resultMessageLockUntil = 0;
-            resultEl.textContent = anchorState === 'active'
-                ? '벽/바닥 기준점을 실제 공간에 고정했습니다!'
-                : '벽/바닥 기준점을 등록했습니다. Anchor 미지원 환경에서는 좌표 재설정을 자동 보정합니다.';
+            guideMessageLockUntil = 0;
             setStep('toe');
+            showGuideMessage(`
+                <span class="guide-info">벽과 바닥의 기준점을 고정했습니다.</span><br>
+                이제 사용자의 발끝 위치를 지정해 주세요.
+            `, 1600);
         }
 
         function releaseWorldAnchor() {
@@ -2054,12 +2107,13 @@
 
             if (
                 anchorTrackingHoldFrames === ANCHOR_TRACKING_HOLD_WARNING_FRAMES &&
-                performance.now() >= resultMessageLockUntil
+                performance.now() >= guideMessageLockUntil
             ) {
-                resultEl.innerHTML =
+                showGuideMessage(
                     savedDistanceText +
-                    '<br><span style="color:#ffcc00;">공간 추적이 잠시 불안정해 마지막 정상 위치를 유지하고 있습니다. 주변을 천천히 다시 비춰 주세요.</span>';
-                resultMessageLockUntil = performance.now() + 2500;
+                    '<span class="guide-warning">공간 추적이 잠시 불안정합니다.<br>마지막 정상 위치를 유지하고 있습니다.</span>',
+                    2500
+                );
             }
         }
 
@@ -2297,15 +2351,10 @@
                 console.warn('[AR] 좌표계 reset 발생: 보정 transform 없음');
 
                 if (!worldAnchor) {
-                    resultEl.innerHTML = `
-                        <span style="color:#ffcc00; font-weight:800;">
-                            공간 좌표가 크게 재설정되었습니다.
-                        </span><br>
-                        <span style="font-size:0.95em;">
-                            정확한 배치를 위해 초기화 후 다시 측정해 주세요.
-                        </span>
-                    `;
-                    resultMessageLockUntil = performance.now() + 5000;
+                    showGuideMessage(`
+                        <span class="guide-warning">공간 좌표가 크게 변경되었습니다.</span><br>
+                        정확한 배치를 위해 초기화 후 다시 측정해 주세요.
+                    `, 5000);
                 }
                 return;
             }
@@ -2323,11 +2372,12 @@
 
             console.warn('[AR] XRReferenceSpace reset 보정 적용');
 
-            if (performance.now() >= resultMessageLockUntil) {
-                resultEl.innerHTML =
+            if (performance.now() >= guideMessageLockUntil) {
+                showGuideMessage(
                     savedDistanceText +
-                    '<br><span style="color:#00d4ff;">공간 추적 좌표를 자동 보정했습니다.</span>';
-                resultMessageLockUntil = performance.now() + 1200;
+                    '<span class="guide-info">공간 추적 좌표를 자동으로 보정했습니다.</span>',
+                    1200
+                );
             }
         }
 
@@ -2400,8 +2450,10 @@
                         hitTestRetryAfter = performance.now() + 1500;
 
                         markPlaneMissing();
-                        resultEl.textContent = '공간 인식을 시작하지 못했습니다. 기기를 천천히 움직여 다시 시도해 주세요.';
-                        resultMessageLockUntil = performance.now() + 2500;
+                        showGuideMessage(`
+                            <span class="guide-warning">공간 인식을 시작하지 못했습니다.</span><br>
+                            기기를 천천히 움직여 다시 시도해 주세요.
+                        `, 2500);
                     }
                 });
         }
@@ -2503,18 +2555,17 @@
                 currentHitMatrix = null;
                 setTargetingMode('crosshair');
 
-                if (performance.now() < resultMessageLockUntil) return;
+                if (performance.now() < guideMessageLockUntil) return;
                 if (isLoadingProductImage) return;
 
-                resultEl.innerHTML =
-                    savedDistanceText +
-                    '<br><span style="color:#ff00ff;">기준점의 수직 위를 화면 중앙에 맞춘 뒤 휴대폰을 위아래로 기울여 높이를 정하고 버튼을 누르세요.</span>';
+                updateGuideForCurrentState();
                 return;
             }
 
             if (step === 'done') {
                 currentHitMatrix = null;
                 setTargetingMode('hidden');
+                hideGuide();
                 return;
             }
 
@@ -2553,20 +2604,15 @@
                     return;
                 }
 
-                if (performance.now() < resultMessageLockUntil) return;
+                if (performance.now() < guideMessageLockUntil) return;
 
                 if (!currentHitMatrix) {
-                    if (!isLoadingProductImage) {
-                        resultEl.textContent = '인식한 평면의 위치를 계산하는 중입니다...';
-                    }
+                    updateGuideForCurrentState();
                     return;
                 }
 
                 if (isLoadingProductImage) return;
-
-                if (step !== 'done') {
-                    resultEl.textContent = '공간 인식 성공! 조준점을 맞춘 뒤 확정 버튼을 누르세요.';
-                }
+                updateGuideForCurrentState();
 
             } else {
                 currentHitMatrix = null;
@@ -2576,24 +2622,17 @@
                 markPlaneMissing();
 
                 if (pendingWallFloorSelection && step === 'wallFloor') {
-                    resultEl.innerHTML = `
-                        <span style="color:#ffcc00; font-weight:800;">
-                            기준점을 다시 인식하는 중입니다.
-                        </span><br>
+                    showGuideMessage(`
+                        <span class="guide-warning">기준점을 다시 인식하는 중입니다.</span><br>
                         기기를 천천히 움직여 같은 바닥 지점을 비춰 주세요.
-                    `;
+                    `, Number.POSITIVE_INFINITY);
                     return;
                 }
 
-                if (performance.now() < resultMessageLockUntil) return;
+                if (performance.now() < guideMessageLockUntil) return;
                 if (isLoadingProductImage) return;
 
-                if (step !== 'done') {
-                    resultEl.textContent =
-                        targetingMode === 'scan'
-                            ? '바닥 평면을 탐색 중입니다...'
-                            : '평면 인식을 잠시 유지하고 있습니다...';
-                }
+                updateGuideForCurrentState();
             }
         }
 
